@@ -8,19 +8,31 @@ from typing import List, Tuple, Union, Callable
 from numpy.typing import NDArray
 
 # Custom
-from shapes import *
-import levelset as ls
-from utils import BCType,WallBC,WallType
-
+from .shapes import *
+from . import levelset as ls
+from .utils import BCType,WallBC,WallType
 
 
 class PoissonIrregularDomain_2d(object):
-    """Code to solve the Poisson equation on an irregular domain with
-    Dirichlet Boundary conditions on the wall and boundary from Gibou et al. (2007)
+    """Class to construct a linear system to solve the Poisson equation on an irregular domain with
+    Dirichlet Boundary conditions on the wall and boundary from Gibou et al. (2007).
+    Can solve inside or outside, as jump conditions are not supported.
     
-        ku-div(mu grad(u)) = f
-        u(interface) = alpha
-        u(wall) = g
+        ku-∇.(μ∇u) = f,        x ϵ Ω
+        u = α,                 x ϵ Γ
+        u = g,                 x ϵ ∂Ω
+    
+    Args:
+        xrange (Tuple[int,int], optional): domain in x. Defaults to (0,1).
+        yrange (Tuple[int,int], optional): domain in y. Defaults to (0,1).
+        nx (int, optional): number of grid points in x. Defaults to 32.
+        ny (int, optional): number of grid points in y. Defaults to 32.
+        alpha (float, optional): value of u on the dirichlet boundary. Defaults to 0.0.
+        phi (Callable | NDArray, optional): level-set function. Defaults to np.zeros((32, 32)).
+        mu (Callable | NDArray, optional): diffusion coefficient. Defaults to np.zeros((32, 32)).
+        k (Callable | NDArray, optional): reaction term. Defaults to np.zeros((32, 32)).
+        f (Callable | NDArray, optional): forcing term. Defaults to np.zeros((32, 32)).
+        g (Callable | NDArray, optional): boundary condition on the wall. Defaults to np.zeros((32, 32)).
     
     """
     def __init__(
@@ -36,7 +48,6 @@ class PoissonIrregularDomain_2d(object):
         f                       : Callable | NDArray = np.zeros((32, 32)),
         g                       : Callable | NDArray = np.zeros((32, 32))
     ):
-        super().__init__()
 
         self.xrange, self.yrange = xrange,yrange
         self.nx, self.ny = nx, ny
@@ -232,6 +243,14 @@ class PoissonIrregularDomain_2d(object):
 
 
     def solve(self,solve_inside=False):
+        """Constructs and solves the linear system to solve the Poisson equation.
+
+        Args:
+            solve_inside (bool, optional): if True, solves inside the boundary. Otherwise, solve outside. Defaults to False.
+
+        Returns:
+            NDArray: the returned solution.
+        """
         lhs,rhs,nodes = self.compute_lhs_rhs(solve_inside=solve_inside)
         
         lu = splu(lhs)
