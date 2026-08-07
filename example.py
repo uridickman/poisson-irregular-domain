@@ -24,8 +24,8 @@ def phi(x, y):
 solver = PoissonIrregularDomain_2d(
     xrange=(-2,2),
     yrange=(-2,2),
-    nx=256,
-    ny=256,
+    nx=64,
+    ny=64,
     alpha=0.0,
     phi=phi,
     mu=mu,

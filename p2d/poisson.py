@@ -37,16 +37,16 @@ class PoissonIrregularDomain_2d(object):
     """
     def __init__(
         self,
-        xrange                  : Tuple[int,int] = (0,1),
-        yrange                  : Tuple[int,int] = (0,1),
-        nx                      : int   = 32,
-        ny                      : int   = 32,
-        alpha                   : float = 0.0,
-        phi                     : Callable | NDArray = np.zeros((32, 32)),
-        mu                      : Callable | NDArray = np.zeros((32, 32)),
-        k                       : Callable | NDArray = np.zeros((32, 32)),
-        f                       : Callable | NDArray = np.zeros((32, 32)),
-        g                       : Callable | NDArray = np.zeros((32, 32))
+        xrange   : Tuple[int,int] = (0,1),
+        yrange   : Tuple[int,int] = (0,1),
+        nx       : int   = 32,
+        ny       : int   = 32,
+        alpha    : float = 0.0,
+        phi      : Callable | NDArray = np.zeros((32, 32)),
+        mu       : Callable | NDArray = np.zeros((32, 32)),
+        k        : Callable | NDArray = np.zeros((32, 32)),
+        f        : Callable | NDArray = np.zeros((32, 32)),
+        g        : Callable | NDArray = np.zeros((32, 32))
     ):
 
         self.xrange, self.yrange = xrange,yrange
