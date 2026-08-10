@@ -27,6 +27,19 @@ The domain $\Omega=\Omega^\pm$, so the solution $u(x,y)$ is only defined **eithe
 \end{equation*}
 ```
 
+### Methods
+
+The level-set function defining the interface is re-initialized to be a signed distance function using 5th order WENO scheme with the Godunov flux-preserving method. The re-initialization solves
+```math
+\phi_t+S(\phi_0)(|\nabla\phi|-1)=0
+```
+with constant extrapolation on the wall boundaries, since $\phi$ is only relevant near the interface boundary.
+The re-initialization procedure is run with a pseudo-timestep $\Delta t$ using the Total Variation Diminishing 3-step Runga-Kutta (TVD RK3) method until $\max_{x,y}|\phi(t_{n})-\phi(t_{n-1})|<\text{NTOL}$, or until the maximum number of iterations is reached.
+
+Then, a linear system is constructed to solve the Poisson equation on the domain defined by the wall and interface boundaries.
+The linear system is symmetric because linear extrapolation is used to determine the values of ghost-nodes across the interface boundary.
+Overall, the scheme is second-order in space.
+
 ### Usage
 
 Create a virtual environment:
