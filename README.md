@@ -2,7 +2,7 @@
 
 *Author*: Uri Dickman
 
-Solves the Poisson equation on an irregular domain based on the methods from Gibou et al. (2002), *J. Comp. Phys.*
+Solves the Poisson equation on an irregular domain on a Cartesian grid based on the methods from Gibou et al. (2002), *J. Comp. Phys.*
 
 ### Problem statement
 
