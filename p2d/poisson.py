@@ -15,7 +15,7 @@ from .utils import BCType,WallBC,WallType
 
 class PoissonIrregularDomain_2d(object):
     """Class to construct a linear system to solve the Poisson equation on an irregular domain with
-    Dirichlet Boundary conditions on the wall and boundary from Gibou et al. (2007).
+    Dirichlet Boundary conditions on the wall and boundary from Gibou et al. (2002).
     Can solve inside or outside, as jump conditions are not supported.
     
         ku-∇.(μ∇u) = f,        x ϵ Ω
@@ -46,8 +46,10 @@ class PoissonIrregularDomain_2d(object):
         mu       : Callable | NDArray = np.zeros((32, 32)),
         k        : Callable | NDArray = np.zeros((32, 32)),
         f        : Callable | NDArray = np.zeros((32, 32)),
-        g        : Callable | NDArray = np.zeros((32, 32))
+        g        : Callable | NDArray = np.zeros((32, 32)),
+        reinit   : bool = True
     ):
+        super().__init__()
 
         self.xrange, self.yrange = xrange,yrange
         self.nx, self.ny = nx, ny
@@ -63,7 +65,8 @@ class PoissonIrregularDomain_2d(object):
         self.alpha = alpha
 
         self.phi = self._evaluate_field(phi,self.X,self.Y)
-        self.phi[:,:] = self._reinitialize_phi(self.phi,self.dx,self.dy,max_iter=500,tol=1e-4)
+        if reinit:
+            self.phi[:,:] = self._reinitialize_phi(self.phi,self.dx,self.dy,max_iter=500,tol=1e-4)
 
         self.mu = self._evaluate_field(mu,self.X,self.Y)
         self.k = self._evaluate_field(k,self.X,self.Y)
@@ -133,7 +136,7 @@ class PoissonIrregularDomain_2d(object):
 
 
     @staticmethod
-    def is_physical(phi,i,j,inside=True):
+    def _is_physical(phi,i,j,inside=True):
         if inside:
             return phi[i,j] < 0
         else:
@@ -151,7 +154,7 @@ class PoissonIrregularDomain_2d(object):
             (i, j)
             for i in range(self.nx)
             for j in range(self.ny)
-            if self.is_physical(self.phi, i, j, inside=solve_inside)
+            if self._is_physical(self.phi, i, j, inside=solve_inside)
         ]
 
         node_ids = -np.ones((self.nx, self.ny), dtype=int)
@@ -249,15 +252,17 @@ class PoissonIrregularDomain_2d(object):
             solve_inside (bool, optional): if True, solves inside the boundary. Otherwise, solve outside. Defaults to False.
 
         Returns:
-            NDArray: the returned solution.
+            NDArray: the returned solution
         """
+        # Construct the linear system
         lhs,rhs,nodes = self.compute_lhs_rhs(solve_inside=solve_inside)
-        
         lu = splu(lhs)
         u = lu.solve(rhs)
 
+        # Populate the full regular grid based on the nodes
+        # used to solve the system.
+        # The other nodes are set to the value on the interface
         sol = np.full((self.nx, self.ny), self.alpha, dtype=float)
-
         for row, (i, j) in enumerate(nodes):
             sol[i, j] = u[row]
         

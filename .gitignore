@@ -6,6 +6,9 @@ __pycache__/
 *.ipynb
 *.png
 *.jpg
+*.h5
+
+generate_dataset.py
 
 # C extensions
 *.so

@@ -7,11 +7,13 @@ class BCType(Enum):
     ROBIN     = 3 # Not implemented
     PERIODIC  = 4 # Not implemented
 
+
 class WallType(Enum):
     LEFT    = 1
     RIGHT   = 2
     TOP     = 3
     BOTTOM  = 4
+
 
 @dataclass
 class WallBC:

@@ -8,24 +8,22 @@ mu = lambda x, y: np.ones_like(x)
 k =  lambda x, y: np.zeros_like(x)
 f =  lambda x, y: np.cos(2*np.pi*x / 2)*np.sin(2*np.pi*y / 2)
 g =  lambda x, y: np.zeros_like(x)
-# phi = lambda x,y: rectangle(x,y,0.0,0.0,1.5,1.5)
 
-def phi(x, y):
-    c1 = circle(x, y,  0.0,  -0.4, 0.45)
-    c2 = circle(x, y,  0.45, 0.15, 0.6)
-    c3 = circle(x, y, -0.60, 0.20, 0.70)
+phi = lambda x,y: rectangle(x,y,0.0,0.0,0.8,0.8)
 
-    main = np.minimum.reduce([c1,c2,c3])
+# def phi(x, y):
+#     c1 = circle(x, y,  0.0,  -0.4, 0.45)
+#     c2 = circle(x, y,  0.45, 0.15, 0.6)
+#     c3 = circle(x, y, -0.60, 0.20, 0.70)
+#     c4 = circle(x, y, 1.25, -1.4, 0.35)
 
-    island = circle(x, y, 1.25, -1.4, 0.35)
-
-    return np.minimum(main, island)
+#     return np.minimum.reduce([c1,c2,c3,c4])
 
 solver = PoissonIrregularDomain_2d(
-    xrange=(-2,2),
-    yrange=(-2,2),
-    nx=64,
-    ny=64,
+    xrange=(-1,1),
+    yrange=(-1,1),
+    nx=128,
+    ny=128,
     alpha=0.0,
     phi=phi,
     mu=mu,

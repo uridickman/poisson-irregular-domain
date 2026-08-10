@@ -43,3 +43,29 @@ def flower(x, y, r0=1.0, amplitude=0.35, n=5):
 
     return r - rb
 
+
+@njit(cache=True)
+def perturbed_circle(
+    x,
+    y,
+    cx,
+    cy,
+    r0,
+    a2,
+    a3,
+    a5,
+    p2,
+    p3,
+    p5,
+):
+    theta = np.arctan2(y - cy, x - cx)
+    rho = np.sqrt((x - cx)**2 + (y - cy)**2)
+
+    r = (
+        r0
+        + a2 * np.cos(2.0 * theta + p2)
+        + a3 * np.cos(3.0 * theta + p3)
+        + a5 * np.cos(5.0 * theta + p5)
+    )
+
+    return rho - r

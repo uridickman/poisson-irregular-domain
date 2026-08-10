@@ -1,7 +1,32 @@
 import numpy as np
+from numpy.typing import NDArray
 from numba import njit
+from typing import Tuple
 
-def reinitialize_phi(phi0, dt, dx, dy, max_iter=50, tol=1e-6):
+def reinitialize_phi(
+    phi0        : NDArray,
+    dt          : float,
+    dx          : float,
+    dy          : float,
+    max_iter    : int       = 50,
+    tol         : float     = 1e-3
+) -> NDArray:
+    """Advects the level set in the outward normal direction until maximum
+    error between phi in successive timesteps satisfies the provided error tolerance or until
+    the number of timesteps exceeds max_iter.
+
+    Args:
+        phi0 (NDArray): non-initialized level-set function
+        dt (float): pseudo-timestep
+        dx (float): x grid size
+        dy (float): y grid size
+        max_iter (int, optional): maximum number of pseudo-timesteps. Defaults to 50.
+        tol (float, optional): error tolerance for convergence. Defaults to 1e-6.
+
+    Returns:
+        NDArray: _description_
+    """
+    
     Nx, Ny = phi0.shape
 
     # Only compare with previous phi for convergence on
@@ -40,7 +65,18 @@ def reinitialize_phi(phi0, dt, dx, dy, max_iter=50, tol=1e-6):
 
 
 @njit(cache=True)
-def constant_extrapolation(phi_extrap, phi):
+def constant_extrapolation(
+    phi_extrap  : NDArray,
+    phi         : NDArray
+) -> None:
+    """Extrapolate the boundary ghost nodes by padding the boundary with the boundary value.
+    WENO requires 3 nodes on each side, so pad 3 on each side.
+
+    Args:
+        phi_extrap (NDArray): N+3 x N+3 array in which to place the extrapolated phi
+        phi (NDArray): N x N array containing the level set function values 
+    """
+    
     phi_extrap[3:-3, 3:-3] = phi
 
     for i in range(3):
@@ -51,12 +87,46 @@ def constant_extrapolation(phi_extrap, phi):
 
 
 @njit(cache=True)
-def sign(phi, eps=1e-3):
+def sign(
+    phi : NDArray,
+    eps : float =1e-3
+) -> NDArray:
+    """Smoothed function Sign(phi), given by
+    
+    S(ϕ) = ϕ / √(ϕ^2+ε^2)
+
+    Args:
+        phi (NDArray): level-set function
+        eps (float, optional): small value. Defaults to 1e-3.
+
+    Returns:
+        NDArray: smoothed Sign function
+    """
+    
     return phi / np.sqrt(phi*phi + eps*eps)
 
 
 @njit(cache=True)
-def WENO5_2d_step(phi:np.ndarray,dx:np.float64,direction:int):
+def WENO5_2d_step(
+    phi         : NDArray,
+    dx          : np.float64,
+    direction   : int
+) -> Tuple[NDArray, NDArray]:
+    """Computes a 5th order WENO step for computing ∂ϕ+/∂x and ∂ϕ-/∂x
+    required by the Godunov scheme.
+
+    Args:
+        phi (NDArray): level-set function
+        dx (np.float64): grid spacing
+        direction (int): direction to compute partials. 0 for x, 1 for y.
+
+    Raises:
+        ValueError: raised when direction is neither 0 nor 1.or
+
+    Returns:
+        Tuple[NDArray, NDArray]: ∂ϕ+/∂x and ∂ϕ-/∂x
+    """
+    
     Nx,Ny = phi.shape
     partial_phi_plus = np.zeros_like(phi)
     partial_phi_minus = np.zeros_like(phi)
@@ -78,7 +148,22 @@ def WENO5_2d_step(phi:np.ndarray,dx:np.float64,direction:int):
 
 
 @njit(cache=True)
-def WENO_partial_phi_vectorized(phi,dx,is_plus):
+def WENO_partial_phi_vectorized(
+    phi     : NDArray,
+    dx      : float,
+    is_plus : bool
+) -> NDArray:
+    """Computes either ∂ϕ+/∂x or ∂ϕ-/∂x using 5th order WENO.
+
+    Args:
+        phi (_type_): level-set function
+        dx (_type_): grif spacing
+        is_plus (bool): if is_plus, compute ∂ϕ+/∂x, otherwise compute ∂ϕ-/∂x.
+
+    Returns:
+        NDArray: array containing either ∂ϕ+/∂x or ∂ϕ-/∂x
+    """
+    
     idx = np.arange(3,len(phi)-3,dtype=np.int64)
     d1 = (phi[idx-2] - phi[idx-3]) / dx
     d2 = (phi[idx-1] - phi[idx-2]) / dx
@@ -118,10 +203,21 @@ def WENO_partial_phi_vectorized(phi,dx,is_plus):
 
 
 @njit(cache=True)
-def godunov_reinit_vectorized(phi, S, direction, dx):
-    phi_plus_minus = WENO5_2d_step(phi, dx, direction)
-    phi_plus = phi_plus_minus[0]
-    phi_minus = phi_plus_minus[1]
+def godunov_reinit_vectorized(
+    phi_plus    : NDArray,
+    phi_minus   : NDArray,
+    S           : NDArray
+) -> NDArray:
+    """Return (∂ϕ/∂x)^2 according to Godunov's flux-preserving scheme
+
+    Args:
+        phi_plus (NDArray): positive stencil partial from WENO
+        phi_minus (NDArray): negative stencil partial from WENO
+        S (NDArray): Sign(phi)
+
+    Returns:
+        NDArray: array containing (∂ϕ/∂x)^2
+    """
     
     phi_x2_S_pos = np.maximum(np.maximum(phi_minus,0.0)**2,np.minimum(phi_plus,0.0)**2)
     phi_x2_S_neg = np.maximum(np.minimum(phi_minus,0.0)**2,np.maximum(phi_plus,0.0)**2)
@@ -130,17 +226,65 @@ def godunov_reinit_vectorized(phi, S, direction, dx):
     
     return phi_x2
 
+
 @njit(cache=True)
-def Euler_godunov_step(phi_prev,S,dt,dx,dy,n_direction):
-    phi_x2 = godunov_reinit_vectorized(phi_prev,S,0,dx)
-    phi_y2 = godunov_reinit_vectorized(phi_prev,S,1,dy)
+def Euler_godunov_step(
+    phi_prev        : NDArray,
+    S               : NDArray,
+    dt              : float,
+    dx              : float,
+    dy              : float,
+    n_direction     : int
+) -> NDArray:
+    """Compute a single Euler step, with the derivative of phi provided by the Godunov scheme and WENO.
+
+    Args:
+        phi_prev (NDArray): phi from previous timestep
+        S (NDArray): Sign(phi)
+        dt (float): pseudo-timestep
+        dx (float): grid spacing in x
+        dy (float): grid spacing in x
+        n_direction (int): normal direction (1 for outward normal, -1 for inward normal)
+
+    Returns:
+        NDArray: advected phi using an Euler step
+    """
+    
+    phi_plus_minus_x = WENO5_2d_step(phi_prev, dx, 0)
+    phi_plus_minus_y = WENO5_2d_step(phi_prev, dy, 1)
+    
+    phi_x2 = godunov_reinit_vectorized(phi_plus_minus_x[0], phi_plus_minus_x[1], S)
+    phi_y2 = godunov_reinit_vectorized(phi_plus_minus_y[0], phi_plus_minus_y[1], S)
+    
     grad = np.sqrt(phi_x2 + phi_y2)
-    phi_new = phi_prev - n_direction*dt*S*(grad-1.0)
+    phi_new = phi_prev - n_direction * dt * S * (grad-1.0)
     constant_extrapolation(phi_new, phi_new[3:-3,3:-3].copy())
+    
     return phi_new
         
         
-def TVD_RK3_step(phi_prev,S,dt,dx,dy,n_direction):
+def TVD_RK3_step(
+    phi_prev        : NDArray,
+    S               : NDArray,
+    dt              : float,
+    dx              : float,
+    dy              : float,
+    n_direction     : int
+) -> NDArray:
+    """Compute a single step using a TVD RK3 scheme, computed as a Runge-Kutta weighted sum of Euler steps.
+
+    Args:
+        phi_prev (NDArray): phi from previous timestep
+        S (NDArray): Sign(phi)
+        dt (float): pseudo-timestep
+        dx (float): grid spacing in x
+        dy (float): grid spacing in x
+        n_direction (int): normal direction (1 for outward normal, -1 for inward normal)
+
+    Returns:
+        NDArray: advected phi using TVD RK3
+    """
+    
     phi_np1 = Euler_godunov_step(phi_prev,S,dt,dx,dy,n_direction)
     phi_np2 = Euler_godunov_step(phi_np1,S,dt,dx,dy,n_direction)
     phi_np1h = 0.75*phi_prev + 0.25*phi_np2
