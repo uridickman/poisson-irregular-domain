@@ -6,17 +6,17 @@ Solves the Poisson equation on an irregular domain based on the methods from Gib
 
 ### Problem statement
 
-$$
+```math
 \begin{align*}
 ku-\nabla\cdot(\mu\nabla u)&=f,\quad x,y \in \Omega \\
 u &= \alpha,\quad x,y \in \Gamma \\
 u &= g,\quad x,y \in \partial \Omega
 \end{align*}
-$$
+```
 
 where $f$ and $g$ are functions of $x$ and $y$, $\alpha$ is a constant, and $k$ and $\mu$ may be spatially varying.
 The domain $\Omega=\Omega^\pm$, so the solution $u(x,y)$ is only defined **either** inside or outside the interface $\Gamma$, where
-$$
+```math
 \begin{equation*}
 \begin{cases}
 \Omega^-&: \{x,y\in\mathbb{R} \space | \space \phi(x,y)<0\} \\
@@ -25,7 +25,7 @@ $$
 \end{cases}
 
 \end{equation*}
-$$
+```
 
 ### Usage
 
