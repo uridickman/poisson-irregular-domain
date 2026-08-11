@@ -54,8 +54,8 @@ class PoissonIrregularDomain_2d(object):
         self.xrange, self.yrange = xrange,yrange
         self.nx, self.ny = nx, ny
 
-        self.dx = (xrange[1] - xrange[0]) / nx
-        self.dy = (yrange[1] - yrange[0]) / ny
+        self.dx = (xrange[1] - xrange[0]) / (nx - 1)
+        self.dy = (yrange[1] - yrange[0]) / (ny - 1)
 
         self.X, self.Y = np.meshgrid(
             np.linspace(*xrange,num=nx),
@@ -122,7 +122,8 @@ class PoissonIrregularDomain_2d(object):
                 "top":    s * phi[i, j+1] < 0,
                 "bottom": s * phi[i, j-1] < 0,
                 "left":   s * phi[i-1, j] < 0,
-                "right":  s * phi[i+1, j] < 0,
+                "right":  s * phi[i+1, 
+                                  j] < 0,
             }
         except IndexError:
             ghosts = {
@@ -150,18 +151,44 @@ class PoissonIrregularDomain_2d(object):
         k = self.k
         f = self.f
 
-        nodes = [
+        interior_nodes = [
             (i, j)
-            for i in range(self.nx)
-            for j in range(self.ny)
+            for i in range(1, self.nx - 1)
+            for j in range(1, self.ny - 1)
             if self._is_physical(self.phi, i, j, inside=solve_inside)
         ]
+        
+        left_nodes = [
+            (0, j)
+            for j in range(self.ny )
+            if self._is_physical(self.phi, 0, j, inside=solve_inside)
+        ]
 
+        right_nodes = [
+            (self.nx - 1, j)
+            for j in range(self.ny)
+            if self._is_physical(self.phi, self.nx - 1, j, inside=solve_inside)
+        ]
+
+        bottom_nodes = [
+            (i, 0)
+            for i in range(1, self.nx - 1)
+            if self._is_physical(self.phi, i, 0, inside=solve_inside)
+        ]
+
+        top_nodes = [
+            (i, self.ny - 1)
+            for i in range(1, self.nx - 1)
+            if self._is_physical(self.phi, i, self.ny - 1, inside=solve_inside)
+        ]
+        
+        all_nodes = interior_nodes + right_nodes + left_nodes + top_nodes + bottom_nodes
+        
         node_ids = -np.ones((self.nx, self.ny), dtype=int)
-        for row, (i, j) in enumerate(nodes):
+        for row, (i, j) in enumerate(all_nodes):
             node_ids[i, j] = row
 
-        N = len(nodes)
+        N = len(all_nodes)
 
         A   = lil_matrix((N, N), dtype=float)
         rhs = np.zeros(N)
@@ -171,12 +198,26 @@ class PoissonIrregularDomain_2d(object):
         dx2 = dx**2
         dy2 = dy**2
 
-        for row,(i,j) in enumerate(nodes):
+        for i,j in right_nodes:
+            row = node_ids[i, j]
+            A[row, row] = 1.0
+            rhs[row] = self.wall_boundary_conditions[WallType.RIGHT].val[j]
+        for i,j in left_nodes:
+            row = node_ids[i, j]
+            A[row, row] = 1.0
+            rhs[row] = self.wall_boundary_conditions[WallType.LEFT].val[j]
+        for i,j in top_nodes:
+            row = node_ids[i, j]
+            A[row, row] = 1.0
+            rhs[row] = self.wall_boundary_conditions[WallType.TOP].val[i]
+        for i,j in bottom_nodes:
+            row = node_ids[i, j]
+            A[row, row] = 1.0
+            rhs[row] = self.wall_boundary_conditions[WallType.BOTTOM].val[i]
+        
+        for row,(i,j) in enumerate(interior_nodes):
             rhs[row] = f[i, j]
             A[row, row] = -k[i, j]
-
-            theta_x = np.abs(phi[i,j]) / dx
-            theta_y = np.abs(phi[i,j]) / dy
             
             ghosts = self._get_ghosts(phi,i,j)
             
@@ -186,63 +227,51 @@ class PoissonIrregularDomain_2d(object):
             bottom_ghost = ghosts["bottom"]
 
             if right_ghost:
+                theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i+1, j]))
                 mu_iph = (mu[i,j] + mu[i+1,j]) / 2
-                A[row, row] -= mu_iph / theta_x / dx2
-                rhs[row] += mu_iph * u_interface / theta_x / dx2
-            elif i + 1 < self.nx and node_ids[i+1, j] != -1:
+                A[row, row] -= mu_iph / theta / dx2
+                rhs[row] += mu_iph * u_interface / theta / dx2
+            else:
                 right_row = node_ids[i+1, j]
                 mu_iph = (mu[i,j] + mu[i+1,j]) / 2
                 A[row, row] -= mu_iph / dx2
                 A[row, right_row] += mu_iph / dx2
-            else:
-                mu_iph = mu[i, j]
-                A[row, row] -= mu_iph / dx2
-                rhs[row] -= mu_iph * self.wall_boundary_conditions[WallType.RIGHT].val[j] / dx2
             
             if left_ghost:
+                theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i-1, j]))
                 mu_imh = (mu[i,j] + mu[i-1,j]) / 2
-                A[row, row] -= mu_imh / theta_x / dx2
-                rhs[row] += mu_imh * u_interface / theta_x / dx2
-            elif i - 1 >= 0 and node_ids[i-1, j] != -1:
+                A[row, row] -= mu_imh / theta / dx2
+                rhs[row] += mu_imh * u_interface / theta / dx2
+            else:
                 left_row = node_ids[i-1, j]
                 mu_imh = (mu[i,j] + mu[i-1,j]) / 2
                 A[row, row] -= mu_imh / dx2
                 A[row, left_row] += mu_imh / dx2
-            else:
-                mu_imh = mu[i, j]
-                A[row, row] -= mu_imh / dx2
-                rhs[row] -= mu_imh * self.wall_boundary_conditions[WallType.LEFT].val[j] / dx2
 
             if top_ghost:
+                theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i, j+1]))
                 mu_jph = (mu[i,j] + mu[i,j+1]) / 2
-                A[row, row] -= mu_jph / theta_y / dy2
-                rhs[row] += mu_jph * u_interface / theta_y / dy2
-            elif j + 1 < self.ny and node_ids[i, j+1] != -1:
+                A[row, row] -= mu_jph / theta / dy2
+                rhs[row] += mu_jph * u_interface / theta / dy2
+            else:
                 top_row = node_ids[i, j+1]
                 mu_jph = (mu[i,j] + mu[i,j+1]) / 2
                 A[row, row] -= mu_jph / dy2
                 A[row, top_row] += mu_jph / dy2
-            else:
-                mu_jph = mu[i, j]
-                A[row, row] -= mu_jph / dy2
-                rhs[row] -= mu_jph * self.wall_boundary_conditions[WallType.TOP].val[i] / dy2
 
             if bottom_ghost:
+                theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i, j-1]))
                 mu_jmh = (mu[i,j] + mu[i,j-1]) / 2
-                A[row, row] -= mu_jmh / theta_y / dy2
-                rhs[row] += mu_jph * u_interface / theta_y / dy2
-            elif j - 1 >= 0 and node_ids[i, j-1] != -1:
+                A[row, row] -= mu_jmh / theta / dy2
+                rhs[row] += mu_jmh * u_interface / theta / dy2
+            else:
                 bottom_row = node_ids[i, j-1]
                 mu_jmh = (mu[i,j] + mu[i,j-1]) / 2
                 A[row, row] -= mu_jmh / dy2
                 A[row, bottom_row] += mu_jmh / dy2
-            else:
-                mu_jmh = mu[i, j]
-                A[row, row] -= mu_jmh / dy2
-                rhs[row] -= mu_jmh * self.wall_boundary_conditions[WallType.BOTTOM].val[i] / dy2
 
         lhs = A.tocsc()
-        return lhs,rhs,nodes
+        return lhs,rhs,all_nodes
 
 
     def solve(self,solve_inside=False):
