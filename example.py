@@ -9,8 +9,9 @@ k =  lambda x, y: np.zeros_like(x)
 f =  lambda x, y: np.cos(2*np.pi*x / 2)*np.sin(2*np.pi*y / 2)
 g =  lambda x, y: np.zeros_like(x)
 
-# phi = lambda x,y: rectangle(x,y,0.0,0.0,0.8,0.8)
-phi = lambda x,y: flower(x,y,r0=0.4)
+# phi = lambda x,y: rectangle(x,y,0.0,0.0,1.5,1.5)
+# phi = lambda x,y: circle(x,y)
+phi = lambda x,y: flower(x,y,r0=1.0)
 
 # def phi(x, y):
 #     c1 = circle(x, y,  0.0,  -0.4, 0.45)
@@ -21,8 +22,8 @@ phi = lambda x,y: flower(x,y,r0=0.4)
 #     return np.minimum.reduce([c1,c2,c3,c4])
 
 solver = PoissonIrregularDomain_2d(
-    xrange=(-1,1),
-    yrange=(-1,1),
+    xrange=(-2,2),
+    yrange=(-2,2),
     nx=256,
     ny=256,
     alpha=0.0,

@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit
+import matplotlib.pyplot as plt
 
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import splu
@@ -201,21 +201,22 @@ class PoissonIrregularDomain_2d(object):
         for i,j in right_nodes:
             row = node_ids[i, j]
             A[row, row] = 1.0
-            rhs[row] = self.wall_boundary_conditions[WallType.RIGHT].val[j]
+            rhs[row] += self.wall_boundary_conditions[WallType.RIGHT].val[j]
         for i,j in left_nodes:
             row = node_ids[i, j]
             A[row, row] = 1.0
-            rhs[row] = self.wall_boundary_conditions[WallType.LEFT].val[j]
+            rhs[row] += self.wall_boundary_conditions[WallType.LEFT].val[j]
         for i,j in top_nodes:
             row = node_ids[i, j]
             A[row, row] = 1.0
-            rhs[row] = self.wall_boundary_conditions[WallType.TOP].val[i]
+            rhs[row] += self.wall_boundary_conditions[WallType.TOP].val[i]
         for i,j in bottom_nodes:
             row = node_ids[i, j]
             A[row, row] = 1.0
-            rhs[row] = self.wall_boundary_conditions[WallType.BOTTOM].val[i]
+            rhs[row] += self.wall_boundary_conditions[WallType.BOTTOM].val[i]
         
-        for row,(i,j) in enumerate(interior_nodes):
+        for i,j in interior_nodes:
+            row = node_ids[i, j]
             rhs[row] = f[i, j]
             A[row, row] = -k[i, j]
             
@@ -225,51 +226,70 @@ class PoissonIrregularDomain_2d(object):
             left_ghost = ghosts["left"]
             top_ghost = ghosts["top"]
             bottom_ghost = ghosts["bottom"]
+            
+            right_wall = i+1 == self.nx-1
+            left_wall = i-1 == 0
+            top_wall = j+1 == self.ny-1
+            bottom_wall = j-1 == 0
+            
+            mu_iph = (mu[i,j] + mu[i+1,j]) / 2
+            mu_imh = (mu[i,j] + mu[i-1,j]) / 2
+            mu_jph = (mu[i,j] + mu[i,j+1]) / 2
+            mu_jmh = (mu[i,j] + mu[i,j-1]) / 2
 
             if right_ghost:
                 theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i+1, j]))
-                mu_iph = (mu[i,j] + mu[i+1,j]) / 2
                 A[row, row] -= mu_iph / theta / dx2
                 rhs[row] += mu_iph * u_interface / theta / dx2
+            elif right_wall:
+                g = self.wall_boundary_conditions[WallType.RIGHT].val[j]
+                A[row, row] -= mu_iph / dx2
+                rhs[row] -= mu_iph * g / dx2
             else:
                 right_row = node_ids[i+1, j]
-                mu_iph = (mu[i,j] + mu[i+1,j]) / 2
                 A[row, row] -= mu_iph / dx2
                 A[row, right_row] += mu_iph / dx2
+                
             
             if left_ghost:
                 theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i-1, j]))
-                mu_imh = (mu[i,j] + mu[i-1,j]) / 2
                 A[row, row] -= mu_imh / theta / dx2
                 rhs[row] += mu_imh * u_interface / theta / dx2
+            elif left_wall:
+                g = self.wall_boundary_conditions[WallType.LEFT].val[j]
+                A[row, row] -= mu_imh / dx2
+                rhs[row] -= mu_imh * g / dx2
             else:
                 left_row = node_ids[i-1, j]
-                mu_imh = (mu[i,j] + mu[i-1,j]) / 2
                 A[row, row] -= mu_imh / dx2
                 A[row, left_row] += mu_imh / dx2
 
             if top_ghost:
                 theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i, j+1]))
-                mu_jph = (mu[i,j] + mu[i,j+1]) / 2
                 A[row, row] -= mu_jph / theta / dy2
                 rhs[row] += mu_jph * u_interface / theta / dy2
+            elif top_wall:
+                g = self.wall_boundary_conditions[WallType.TOP].val[i]
+                A[row, row] -= mu_jph / dy2
+                rhs[row] -= mu_jph * g / dy2
             else:
                 top_row = node_ids[i, j+1]
-                mu_jph = (mu[i,j] + mu[i,j+1]) / 2
                 A[row, row] -= mu_jph / dy2
                 A[row, top_row] += mu_jph / dy2
 
             if bottom_ghost:
                 theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i, j-1]))
-                mu_jmh = (mu[i,j] + mu[i,j-1]) / 2
                 A[row, row] -= mu_jmh / theta / dy2
                 rhs[row] += mu_jmh * u_interface / theta / dy2
+            elif bottom_wall:
+                g = self.wall_boundary_conditions[WallType.BOTTOM].val[i]
+                A[row, row] -= mu_jmh / dy2
+                rhs[row] -= mu_jmh * g / dy2
             else:
                 bottom_row = node_ids[i, j-1]
-                mu_jmh = (mu[i,j] + mu[i,j-1]) / 2
                 A[row, row] -= mu_jmh / dy2
                 A[row, bottom_row] += mu_jmh / dy2
-
+        
         lhs = A.tocsc()
         return lhs,rhs,all_nodes
 
