@@ -2,7 +2,21 @@ import numpy as np
 from numpy.typing import NDArray
 from numba import njit
 from typing import Tuple
+from ..utils.time import TimeManager,TimeIntegrator
 
+def advect_single_step_phi(
+    phi_prev        : NDArray,
+    Vn          : float,
+    dt          : float,
+    dx          : float,
+    dy          : float,
+    tm
+):
+    phi_next = tm.advance(phi_prev)
+    constant_extrapolation(phi_next, phi_prev[3:-3,3:-3])
+    return phi_next
+
+    
 def reinitialize_phi(
     phi0        : NDArray,
     dt          : float,
@@ -27,6 +41,8 @@ def reinitialize_phi(
         NDArray: _description_
     """
     
+    trange = (0.0, max_iter * dt)
+    
     Nx, Ny = phi0.shape
 
     # Only compare with previous phi for convergence on
@@ -42,12 +58,15 @@ def reinitialize_phi(
     S = sign(phi0, eps=min(dx, dy))
     S_ext = np.zeros_like(phi)
     constant_extrapolation(S_ext, S)
+    
+    integrator = TVD_RK3_Godunov(dt, S_ext, dx, dy, step_fn=reinit_Euler_godunov_step)
+    tm = TimeManager(trange=trange,dt=dt,integrator=integrator)
 
-    for n_iter in range(max_iter):
+    while not tm.done():
 
         phi_old = phi.copy()
 
-        phi = TVD_RK3_step(phi, S_ext, dt, dx, dy, n_direction=1)
+        phi = tm.advance(phi_old)
 
         phi_inner = phi[3:-3, 3:-3]
         phi_old_inner = phi_old[3:-3, 3:-3]
@@ -55,10 +74,10 @@ def reinitialize_phi(
         err = np.max(np.abs(phi_inner[band] - phi_old_inner[band]))
 
         if err < tol:
-            print(f"Reinitialization converged in {n_iter+1} iterations.")
+            print(f"Reinitialization converged in {tm.step} iterations.")
             return phi_inner
 
-    print(f"Reinitialization failed to converge in {max_iter} iterations.")
+    print(f"Reinitialization failed to converge in {tm.num_steps} iterations.")
     print(f"Final error = {err:e}")
 
     return phi[3:-3, 3:-3]
@@ -228,7 +247,42 @@ def godunov_reinit_vectorized(
 
 
 @njit(cache=True)
-def Euler_godunov_step(
+def advection_Euler_godunov_step(
+    phi_prev        : NDArray,
+    Vn              : NDArray,
+    dt              : float,
+    dx              : float,
+    dy              : float
+) -> NDArray:
+    """Compute a single Euler step, with the derivative of phi provided by the Godunov scheme and WENO.
+
+    Args:
+        phi_prev (NDArray): phi from previous timestep
+        S (NDArray): Sign(phi)
+        dt (float): pseudo-timestep
+        dx (float): grid spacing in x
+        dy (float): grid spacing in x
+        n_direction (int): normal direction (1 for outward normal, -1 for inward normal)
+
+    Returns:
+        NDArray: advected phi using an Euler step
+    """
+    
+    phi_plus_minus_x = WENO5_2d_step(phi_prev, dx, 0)
+    phi_plus_minus_y = WENO5_2d_step(phi_prev, dy, 1)
+    
+    phi_x2 = godunov_reinit_vectorized(phi_plus_minus_x[0], phi_plus_minus_x[1], S)
+    phi_y2 = godunov_reinit_vectorized(phi_plus_minus_y[0], phi_plus_minus_y[1], S)
+    
+    grad = np.sqrt(phi_x2 + phi_y2)
+    phi_new = phi_prev + dt * Vn * grad
+    constant_extrapolation(phi_new, phi_new[3:-3,3:-3].copy())
+    
+    return phi_new
+
+
+@njit(cache=True)
+def reinit_Euler_godunov_step(
     phi_prev        : NDArray,
     S               : NDArray,
     dt              : float,
@@ -261,35 +315,31 @@ def Euler_godunov_step(
     constant_extrapolation(phi_new, phi_new[3:-3,3:-3].copy())
     
     return phi_new
-        
-        
-def TVD_RK3_step(
-    phi_prev        : NDArray,
-    S               : NDArray,
-    dt              : float,
-    dx              : float,
-    dy              : float,
-    n_direction     : int
-) -> NDArray:
-    """Compute a single step using a TVD RK3 scheme, computed as a Runge-Kutta weighted sum of Euler steps.
 
-    Args:
-        phi_prev (NDArray): phi from previous timestep
-        S (NDArray): Sign(phi)
-        dt (float): pseudo-timestep
-        dx (float): grid spacing in x
-        dy (float): grid spacing in x
-        n_direction (int): normal direction (1 for outward normal, -1 for inward normal)
+        
+class TVD_RK3_Godunov(TimeIntegrator):
+    def __init__(self,dt,S,dx,dy,step_fn):
+        """Implements the TVD RK3 scheme, computed as a Runge-Kutta weighted sum of Euler steps.
 
-    Returns:
-        NDArray: advected phi using TVD RK3
-    """
+        Args:
+            S (NDArray): Sign(phi)
+            dt (float): pseudo-timestep
+            dx (float): grid spacing in x
+            dy (float): grid spacing in x
+        """
+        super().__init__(dt=dt)
+        self.S = S
+        self.dx = dx
+        self.dy = dy
+        self.godunov_step = step_fn
     
-    phi_np1 = Euler_godunov_step(phi_prev,S,dt,dx,dy,n_direction)
-    phi_np2 = Euler_godunov_step(phi_np1,S,dt,dx,dy,n_direction)
-    phi_np1h = 0.75*phi_prev + 0.25*phi_np2
-    phi_np3h = Euler_godunov_step(phi_np1h,S,dt,dx,dy,n_direction)
-    phi_out = (phi_prev + 2*phi_np3h) / 3
-    constant_extrapolation(phi_out, phi_out[3:-3,3:-3].copy())
-    
-    return phi_out
+    def step(self,phi_prev):
+        args = (self.S,self.dt,self.dx,self.dy,1)
+        phi_np1 = self.godunov_step(phi_prev,*args)
+        phi_np2 = self.godunov_step(phi_np1,*args)
+        phi_np1h = 0.75*phi_prev + 0.25*phi_np2
+        phi_np3h = self.godunov_step(phi_np1h,*args)
+        phi_out = (phi_prev + 2*phi_np3h) / 3
+        constant_extrapolation(phi_out, phi_out[3:-3,3:-3].copy())
+        
+        return phi_out

@@ -6,9 +6,9 @@ from typing import List, Tuple, Union, Callable
 from numpy.typing import NDArray
 
 # Custom
-from .shapes import *
-from . import levelset as ls
-from .utils import BCType,WallBC,WallType
+from ..utils.shapes import *
+from ..levelset import reinitialization as ls
+from ..utils.bcs import BCType,WallBC,WallType
 
 
 class PoissonIrregularDomain_2d(object):
@@ -21,30 +21,30 @@ class PoissonIrregularDomain_2d(object):
         u = g,                 x ϵ ∂Ω
     
     Args:
-        xrange (Tuple[int,int], optional): domain in x. Defaults to (0,1).
-        yrange (Tuple[int,int], optional): domain in y. Defaults to (0,1).
+        xrange (tuple[int,int], optional): domain in x. Defaults to (0,1).
+        yrange (tuple[int,int], optional): domain in y. Defaults to (0,1).
         nx (int, optional): number of grid points in x. Defaults to 32.
         ny (int, optional): number of grid points in y. Defaults to 32.
         alpha (float, optional): value of u on the dirichlet boundary. Defaults to 0.0.
-        phi (Callable | NDArray, optional): level-set function. Defaults to np.zeros((32, 32)).
-        mu (Callable | NDArray, optional): diffusion coefficient. Defaults to np.zeros((32, 32)).
-        k (Callable | NDArray, optional): reaction term. Defaults to np.zeros((32, 32)).
-        f (Callable | NDArray, optional): forcing term. Defaults to np.zeros((32, 32)).
-        g (Callable | NDArray, optional): boundary condition on the wall. Defaults to np.zeros((32, 32)).
+        phi (callable | NDArray, optional): level-set function. Defaults to np.zeros((32, 32)).
+        mu (callable | NDArray, optional): diffusion coefficient. Defaults to np.zeros((32, 32)).
+        k (callable | NDArray, optional): reaction term. Defaults to np.zeros((32, 32)).
+        f (callable | NDArray, optional): forcing term. Defaults to np.zeros((32, 32)).
+        g (callable | NDArray, optional): boundary condition on the wall. Defaults to np.zeros((32, 32)).
     
     """
     def __init__(
         self,
-        xrange   : Tuple[int,int] = (0,1),
-        yrange   : Tuple[int,int] = (0,1),
+        xrange   : tuple[int,int] = (0,1),
+        yrange   : tuple[int,int] = (0,1),
         nx       : int   = 32,
         ny       : int   = 32,
         alpha    : float = 0.0,
-        phi      : Callable | NDArray = np.zeros((32, 32)),
-        mu       : Callable | NDArray = np.zeros((32, 32)),
-        k        : Callable | NDArray = np.zeros((32, 32)),
-        f        : Callable | NDArray = np.zeros((32, 32)),
-        g        : Callable | NDArray = np.zeros((32, 32)),
+        phi      : callable | NDArray = np.zeros((32, 32)),
+        mu       : callable | NDArray = np.zeros((32, 32)),
+        k        : callable | NDArray = np.zeros((32, 32)),
+        f        : callable | NDArray = np.zeros((32, 32)),
+        g        : callable | NDArray = np.zeros((32, 32)),
         reinit   : bool = True
     ):
         super().__init__()
@@ -120,8 +120,7 @@ class PoissonIrregularDomain_2d(object):
                 "top":    s * phi[i, j+1] < 0,
                 "bottom": s * phi[i, j-1] < 0,
                 "left":   s * phi[i-1, j] < 0,
-                "right":  s * phi[i+1, 
-                                  j] < 0,
+                "right":  s * phi[i+1, j] < 0,
             }
         except IndexError:
             ghosts = {

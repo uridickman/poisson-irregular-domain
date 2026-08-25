@@ -7,6 +7,10 @@ __pycache__/
 *.png
 *.jpg
 *.h5
+*.bak
+*.lock
+loss.py
+example2.py
 
 generate_dataset.py
 

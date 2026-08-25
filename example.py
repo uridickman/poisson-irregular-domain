@@ -1,17 +1,17 @@
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-from p2d.poisson import PoissonIrregularDomain_2d
-from p2d.shapes import *
+from src.p2d.solvers.poisson import PoissonIrregularDomain_2d
+from src.p2d.utils.shapes import *
 
 mu = lambda x, y: np.ones_like(x)
 k =  lambda x, y: np.zeros_like(x)
 f =  lambda x, y: np.cos(2*np.pi*x / 2)*np.sin(2*np.pi*y / 2)
 g =  lambda x, y: np.zeros_like(x)
 
-# phi = lambda x,y: rectangle(x,y,0.0,0.0,1.5,1.5)
+phi = lambda x,y: rectangle(x,y,0.0,0.0,1.5,1.5)
 # phi = lambda x,y: circle(x,y)
-phi = lambda x,y: flower(x,y,r0=1.0)
+# phi = lambda x,y: flower(x,y,r0=1.0)
 
 # def phi(x, y):
 #     c1 = circle(x, y,  0.0,  -0.4, 0.45)
@@ -24,8 +24,8 @@ phi = lambda x,y: flower(x,y,r0=1.0)
 solver = PoissonIrregularDomain_2d(
     xrange=(-2,2),
     yrange=(-2,2),
-    nx=256,
-    ny=256,
+    nx=128,
+    ny=128,
     alpha=0.0,
     phi=phi,
     mu=mu,

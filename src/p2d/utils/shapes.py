@@ -1,5 +1,4 @@
 from numba import njit
-from numba.experimental import jitclass
 import numpy as np
 
 
