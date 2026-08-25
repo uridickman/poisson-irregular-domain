@@ -73,7 +73,7 @@ class ForwardEuler(TimeIntegrator):
         return u_prev + self.dt * (self.A @ u_prev)
 
 
-class RK3(TimeManager):
+class RK3(TimeIntegrator):
     def __init__(self,dt,A):
         super().__init__(dt=dt)
         self.A = A
@@ -85,7 +85,7 @@ class RK3(TimeManager):
         return (u_prev + 2 * u3) / 3
 
 
-class BackwardEuler(TimeManager):
+class BackwardEuler(TimeIntegrator):
     def __init__(self,dt,A):
         super().__init__(dt=dt)
         
@@ -98,7 +98,7 @@ class BackwardEuler(TimeManager):
         return self.A.solve(u_prev)
 
 
-class CrankNicolson(TimeManager):
+class CrankNicolson(TimeIntegrator):
     def __init__(self,dt,A):
         super().__init__(dt=dt)
         
