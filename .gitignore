@@ -11,6 +11,7 @@ __pycache__/
 *.lock
 loss.py
 example2.py
+.python-version
 
 generate_dataset.py
 
