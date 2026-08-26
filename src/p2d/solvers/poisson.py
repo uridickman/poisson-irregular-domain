@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 
 # Custom
 from ..utils.shapes import *
-from ..levelset import reinitialization as ls
+from ..levelset import advection as lsa
 from ..utils.bcs import BCType,WallBC,WallType
 
 
@@ -106,7 +106,7 @@ class PoissonIrregularDomain_2d(object):
     def _reinitialize_phi(phi,dx,dy,max_iter=500,tol=1e-4):
         print("Reinitializing level-set function...")
         dt = 0.3 * np.minimum(dx,dy)
-        return ls.reinitialize_phi(
+        return lsa.reinitialize_phi(
             phi,dt,dx,dy,max_iter=max_iter,tol=tol
         )
 

@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 
 # Custom
 from ..utils.shapes import *
-from ..levelset import reinitialization as ls
+from ..levelset import advection as lsa
 from ..utils.bcs import BCType,WallBC,WallType
 
 
