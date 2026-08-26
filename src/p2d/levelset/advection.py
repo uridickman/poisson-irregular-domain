@@ -2,7 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 from numba import njit
 from typing import Tuple
-from ..utils.time import TimeManager,TimeIntegrator
+from ..solvers.time import TimeManager,TimeIntegrator
 from .hj import *
 
 def reinitialize_phi(
@@ -13,6 +13,7 @@ def reinitialize_phi(
     max_iter    : int       = 50,
     tol         : float     = 1e-3
 ) -> NDArray:
+
     trange = (0.0, max_iter * dt)
     
     Nx, Ny = phi0.shape
@@ -40,7 +41,6 @@ def reinitialize_phi(
 
         phi_next = tm.advance(phi_old,Vn=S_ext,f=S_ext)
 
-        # keep ghost cells consistent with the newly advanced interior
         constant_extrapolation(phi_next, phi_next[3:-3, 3:-3])
 
         err = np.max(np.abs(phi_next[3:-3, 3:-3][band] - phi_old[3:-3, 3:-3][band]))

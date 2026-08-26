@@ -2,7 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 from numba import njit
 from typing import Tuple
-from ..utils.time import TimeManager,TimeIntegrator
+from ..solvers.time import TimeManager,TimeIntegrator
 
 
 @njit(cache=True)
@@ -208,7 +208,6 @@ class TVD_RK3_Godunov(TimeIntegrator):
         phi_np1h = 0.75*phi_prev + 0.25*phi_np2
         phi_np3h = self.godunov_Euler_step(phi_np1h,Vn,f,*self.args)
         phi_out = (phi_prev + 2*phi_np3h) / 3
-        constant_extrapolation(phi_out, phi_out[3:-3,3:-3].copy())
         
         return phi_out
 
