@@ -10,40 +10,26 @@ class TimeManager(object):
     def __init__(
         self,
         trange: Tuple[float, float] = (0.0, 1.0),
-        dt: float = 0.1,
         integrator : str = "RK3"
     ):
         super().__init__()
 
         self.tmin, self.tmax = trange
-        self.dt = dt
         
-        self.T = np.arange(*trange,step=dt)
+        self.integrator = integrator
+        self.dt = self.integrator.dt
+        self.T = np.arange(*trange,step=self.dt)
         self.t = self.tmin
         self.step = 0
         
         self.num_steps = int((self.tmax - self.tmin) / self.dt)
         
-        if isinstance(integrator, TimeIntegrator):
-            self.integrator = integrator
-        else:
-            match integrator:
-                case "FE":
-                    self.integrator = ForwardEuler(dt, A)
-                case "BE":
-                    self.integrator = BackwardEuler(dt, A)
-                case "CN":
-                    self.integrator = CrankNicolson(dt, A)
-                case "RK3":
-                    self.integrator = RK3(dt, A)
-                case _:
-                    raise ValueError("Argument 'method' must be one of ['FE', 'BE', 'CN', or 'RK3']")
-
+        
     def reset(self):
         self.t = 0
 
-    def advance(self, u_prev):
-        u_next = self.integrator.step(u_prev)
+    def advance(self, u_prev,**kwargs):
+        u_next = self.integrator.step(u_prev,**kwargs)
         self.t += self.dt
         self.step += 1
         
@@ -54,20 +40,19 @@ class TimeManager(object):
 
 
 class TimeIntegrator(ABC):
-    def __init__(self,dt):
+    def __init__(self):
         super().__init__()
         
-        self.dt = dt
-        
     @abstractmethod
-    def step(self,u_prev):
+    def step(self,u_prev,**kwargs):
         pass
 
 
 class ForwardEuler(TimeIntegrator):
     def __init__(self,dt,A):
-        super().__init__(dt=dt)
+        super().__init__()
         self.A = A
+        self.dt = dt
     
     def step(self,u_prev):
         return u_prev + self.dt * (self.A @ u_prev)
@@ -75,8 +60,9 @@ class ForwardEuler(TimeIntegrator):
 
 class RK3(TimeIntegrator):
     def __init__(self,dt,A):
-        super().__init__(dt=dt)
+        super().__init__()
         self.A = A
+        self.dt = dt
 
     def step(self,u_prev):
         u1 = u_prev + self.dt * (self.A @ u_prev)
@@ -88,6 +74,8 @@ class RK3(TimeIntegrator):
 class BackwardEuler(TimeIntegrator):
     def __init__(self,dt,A):
         super().__init__(dt=dt)
+
+        self.dt = dt
         
         n,m = A.shape[0],A.shape[1]
         I = eye(n,m)
@@ -100,8 +88,10 @@ class BackwardEuler(TimeIntegrator):
 
 class CrankNicolson(TimeIntegrator):
     def __init__(self,dt,A):
-        super().__init__(dt=dt)
-        
+        super().__init__()
+
+        self.dt = dt
+
         n,m = A.shape[0],A.shape[1]
         I = eye(n,m)
         

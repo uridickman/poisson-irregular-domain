@@ -31,14 +31,14 @@ def reinitialize_phi(
     S_ext = np.zeros_like(phi)
     constant_extrapolation(S_ext, S)
     
-    integrator = TVD_RK3_Godunov(S_ext, S_ext, dt, dx, dy, n_direction=1)
-    tm = TimeManager(trange=trange,dt=dt,integrator=integrator)
+    integrator = TVD_RK3_Godunov(dt, dx, dy, n_direction=1)
+    tm = TimeManager(trange=trange,integrator=integrator)
 
     while not tm.done():
 
         phi_old = phi.copy()
 
-        phi_next = tm.advance(phi_old)
+        phi_next = tm.advance(phi_old,Vn=S_ext,f=S_ext)
 
         # keep ghost cells consistent with the newly advanced interior
         constant_extrapolation(phi_next, phi_next[3:-3, 3:-3])

@@ -186,30 +186,27 @@ def _godunov_Euler_step(
 
 
 class TVD_RK3_Godunov(TimeIntegrator):
-    def __init__(self,Vn,f,dt,dx,dy,n_direction=1):
+    def __init__(self,dt,dx,dy,n_direction=1):
         """Implements the TVD RK3 scheme, computed as a Runge-Kutta weighted sum of Euler steps.
 
         Args:
-            Vn (NDArray): Vn
-            f (NDArray): f(x,y)
-            dt (float): pseudo-timestep
             dx (float): grid spacing in x
             dy (float): grid spacing in x
         """
-        super().__init__(dt=dt)
-        self.Vn = Vn
-        self.f = f
+        super().__init__()
+
+        self.dt = dt
         self.dx = dx
         self.dy = dy
         self.n_direction = n_direction
 
-        self.args = args = (self.Vn,self.f,self.dt,self.dx,self.dy,self.n_direction)
+        self.args = (self.dt,self.dx,self.dy,self.n_direction)
     
-    def step(self,phi_prev):
-        phi_np1 = self.godunov_Euler_step(phi_prev,*self.args)
-        phi_np2 = self.godunov_Euler_step(phi_np1,*self.args)
+    def step(self,phi_prev,Vn,f):
+        phi_np1 = self.godunov_Euler_step(phi_prev,Vn,f,*self.args)
+        phi_np2 = self.godunov_Euler_step(phi_np1,Vn,f,*self.args)
         phi_np1h = 0.75*phi_prev + 0.25*phi_np2
-        phi_np3h = self.godunov_Euler_step(phi_np1h,*self.args)
+        phi_np3h = self.godunov_Euler_step(phi_np1h,Vn,f,*self.args)
         phi_out = (phi_prev + 2*phi_np3h) / 3
         constant_extrapolation(phi_out, phi_out[3:-3,3:-3].copy())
         
