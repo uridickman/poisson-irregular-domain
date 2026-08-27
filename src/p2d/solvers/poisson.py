@@ -8,6 +8,7 @@ from numpy.typing import NDArray
 # Custom
 from ..utils.shapes import *
 from ..levelset import advection as lsa
+from ..levelset import hj as hj
 from ..utils.bcs import BCType,WallBC,WallType
 
 
@@ -20,12 +21,14 @@ class PoissonIrregularDomain_2d(object):
         u = α,                 x ϵ Γ
         u = g,                 x ϵ ∂Ω
     
+    TODO: Enable solving both inside and outside since BCs are Dirichlet
+
     Args:
         xrange (tuple[int,int], optional): domain in x. Defaults to (0,1).
         yrange (tuple[int,int], optional): domain in y. Defaults to (0,1).
         nx (int, optional): number of grid points in x. Defaults to 32.
         ny (int, optional): number of grid points in y. Defaults to 32.
-        alpha (float, optional): value of u on the dirichlet boundary. Defaults to 0.0.
+        alpha (callable | float, optional): value of u on the Dirichlet boundary. Defaults to 0.0.
         phi (callable | NDArray, optional): level-set function. Defaults to np.zeros((32, 32)).
         mu (callable | NDArray, optional): diffusion coefficient. Defaults to np.zeros((32, 32)).
         k (callable | NDArray, optional): reaction term. Defaults to np.zeros((32, 32)).
@@ -39,7 +42,7 @@ class PoissonIrregularDomain_2d(object):
         yrange   : tuple[int,int] = (0,1),
         nx       : int   = 32,
         ny       : int   = 32,
-        alpha    : float = 0.0,
+        alpha    : callable | float = 0.0,
         phi      : callable | NDArray = np.zeros((32, 32)),
         mu       : callable | NDArray = np.zeros((32, 32)),
         k        : callable | NDArray = np.zeros((32, 32)),
@@ -57,10 +60,14 @@ class PoissonIrregularDomain_2d(object):
 
         self.X, self.Y = np.meshgrid(
             np.linspace(*xrange,num=nx),
-            np.linspace(*yrange,num=ny)
+            np.linspace(*yrange,num=ny),
+            indexing="ij"
         )
         
-        self.alpha = alpha
+        if callable(alpha):
+            self.alpha_fn = alpha
+        else:
+            self.alpha_fn = lambda x, y, _alpha=alpha: np.full_like(np.asarray(x, dtype=float), _alpha)
 
         self.phi = self._evaluate_field(phi,self.X,self.Y)
         if reinit:
@@ -70,7 +77,7 @@ class PoissonIrregularDomain_2d(object):
         self.k = self._evaluate_field(k,self.X,self.Y)
         self.f = self._evaluate_field(f,self.X,self.Y)
         self.g = self._evaluate_field(g,self.X,self.Y)
-
+        
         self.wall_boundary_conditions = {
             WallType.LEFT   : WallBC(
                                 bc_type   = BCType.DIRICHLET,
@@ -99,6 +106,8 @@ class PoissonIrregularDomain_2d(object):
     def _evaluate_field(field, x, y):
         if callable(field):
             return field(x, y)
+        if isinstance(field, (int, float)):
+            return np.full_like(x, field, dtype=float)
         return field
 
 
@@ -113,7 +122,7 @@ class PoissonIrregularDomain_2d(object):
 
     @staticmethod
     def _get_ghosts(phi, i, j):
-        s = phi[i, j]
+        s = phi[i,j]
 
         try:
             ghosts = {
@@ -142,7 +151,7 @@ class PoissonIrregularDomain_2d(object):
 
 
     def compute_lhs_rhs(self,solve_inside=False):
-        u_interface = self.alpha
+            
         phi = self.phi
         mu = self.mu
         k = self.k
@@ -190,6 +199,8 @@ class PoissonIrregularDomain_2d(object):
         A   = lil_matrix((N, N), dtype=float)
         rhs = np.zeros(N)
 
+        X = self.X
+        Y = self.Y
         dx = self.dx
         dy = self.dy
         dx2 = dx**2
@@ -213,6 +224,9 @@ class PoissonIrregularDomain_2d(object):
             rhs[row] += self.wall_boundary_conditions[WallType.BOTTOM].val[i]
         
         for i,j in interior_nodes:
+            
+            phi_ij = phi[i,j]
+                
             row = node_ids[i, j]
             rhs[row] = f[i, j]
             A[row, row] = -k[i, j]
@@ -235,9 +249,10 @@ class PoissonIrregularDomain_2d(object):
             mu_jmh = (mu[i,j] + mu[i,j-1]) / 2
 
             if right_ghost:
-                theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i+1, j]))
+                theta = np.abs(phi_ij) / (np.abs(phi_ij) + np.abs(phi[i+1, j]))
+                u_interface = self.alpha_fn(X[i, j] + theta * dx, Y[i, j])
                 A[row, row] -= mu_iph / theta / dx2
-                rhs[row] += mu_iph * u_interface / theta / dx2
+                rhs[row] -= mu_iph * u_interface / theta / dx2
             elif right_wall:
                 g = self.wall_boundary_conditions[WallType.RIGHT].val[j]
                 A[row, row] -= mu_iph / dx2
@@ -249,9 +264,10 @@ class PoissonIrregularDomain_2d(object):
                 
             
             if left_ghost:
-                theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i-1, j]))
+                theta = np.abs(phi_ij) / (np.abs(phi_ij) + np.abs(phi[i-1, j]))
+                u_interface = self.alpha_fn(X[i, j] - theta * dx, Y[i, j])
                 A[row, row] -= mu_imh / theta / dx2
-                rhs[row] += mu_imh * u_interface / theta / dx2
+                rhs[row] -= mu_imh * u_interface / theta / dx2
             elif left_wall:
                 g = self.wall_boundary_conditions[WallType.LEFT].val[j]
                 A[row, row] -= mu_imh / dx2
@@ -262,9 +278,10 @@ class PoissonIrregularDomain_2d(object):
                 A[row, left_row] += mu_imh / dx2
 
             if top_ghost:
-                theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i, j+1]))
+                theta = np.abs(phi_ij) / (np.abs(phi_ij) + np.abs(phi[i, j+1]))
+                u_interface = self.alpha_fn(X[i, j], Y[i, j] + theta * dy)
                 A[row, row] -= mu_jph / theta / dy2
-                rhs[row] += mu_jph * u_interface / theta / dy2
+                rhs[row] -= mu_jph * u_interface / theta / dy2
             elif top_wall:
                 g = self.wall_boundary_conditions[WallType.TOP].val[i]
                 A[row, row] -= mu_jph / dy2
@@ -275,9 +292,10 @@ class PoissonIrregularDomain_2d(object):
                 A[row, top_row] += mu_jph / dy2
 
             if bottom_ghost:
-                theta = np.abs(phi[i, j]) / (np.abs(phi[i, j]) + np.abs(phi[i, j-1]))
+                theta = np.abs(phi_ij) / (np.abs(phi_ij) + np.abs(phi[i, j-1]))
+                u_interface = self.alpha_fn(X[i, j], Y[i, j] - theta * dy)
                 A[row, row] -= mu_jmh / theta / dy2
-                rhs[row] += mu_jmh * u_interface / theta / dy2
+                rhs[row] -= mu_jmh * u_interface / theta / dy2
             elif bottom_wall:
                 g = self.wall_boundary_conditions[WallType.BOTTOM].val[i]
                 A[row, row] -= mu_jmh / dy2
@@ -291,7 +309,18 @@ class PoissonIrregularDomain_2d(object):
         return lhs,rhs,all_nodes
 
 
-    def solve(self,solve_inside=False):
+    def solve(self,solve_where="inside"):
+        if solve_where == "both":
+            sol = self.solve_one_side(solve_inside=True)
+            sol_outside = self.solve_one_side(solve_inside=False)
+            
+            sol[self.phi > 0] = sol_outside[self.phi > 0]
+            return sol
+        else:
+            return self.solve_one_side(solve_inside=(solve_where=="inside"))
+
+
+    def solve_one_side(self,solve_inside=False):
         """Constructs and solves the linear system to solve the Poisson equation.
 
         Args:
@@ -307,8 +336,8 @@ class PoissonIrregularDomain_2d(object):
 
         # Populate the full regular grid based on the nodes
         # used to solve the system.
-        # The other nodes are set to the value on the interface
-        sol = np.full((self.nx, self.ny), self.alpha, dtype=float)
+        # The other nodes are set to the value on the interface.nx
+        sol = np.full((self.nx, self.ny), np.nan)
         for row, (i, j) in enumerate(nodes):
             sol[i, j] = u[row]
         

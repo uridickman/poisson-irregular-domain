@@ -3,7 +3,7 @@ from abc import ABC,abstractmethod
 import numpy as np
 from numpy.typing import NDArray
 
-from scipy.sparse import lil_matrix,eye
+from scipy.sparse import lil_matrix, eye
 from scipy.sparse.linalg import splu
 
 class TimeManager(object):
@@ -28,8 +28,8 @@ class TimeManager(object):
     def reset(self):
         self.t = 0
 
-    def advance(self, u_prev,**kwargs):
-        u_next = self.integrator.step(u_prev,**kwargs)
+    def advance(self, u_prev, **kwargs):
+        u_next = self.integrator.step(u_prev, **kwargs)
         self.t += self.dt
         self.step += 1
         
@@ -49,7 +49,7 @@ class TimeIntegrator(ABC):
 
 
 class ForwardEuler(TimeIntegrator):
-    def __init__(self,dt,A):
+    def __init__(self, dt, A):
         super().__init__()
         self.A = A
         self.dt = dt
@@ -59,12 +59,12 @@ class ForwardEuler(TimeIntegrator):
 
 
 class RK3(TimeIntegrator):
-    def __init__(self,dt,A):
+    def __init__(self, dt, A):
         super().__init__()
         self.A = A
         self.dt = dt
 
-    def step(self,u_prev):
+    def step(self, u_prev):
         u1 = u_prev + self.dt * (self.A @ u_prev)
         u2 = 0.75 * u_prev + 0.25 * (u1 + self.dt * (self.A @ u1))
         u3 = u2 + self.dt * (self.A @ u2)
@@ -72,7 +72,7 @@ class RK3(TimeIntegrator):
 
 
 class BackwardEuler(TimeIntegrator):
-    def __init__(self,dt,A):
+    def __init__(self, dt, A):
         super().__init__(dt=dt)
 
         self.dt = dt
@@ -87,7 +87,7 @@ class BackwardEuler(TimeIntegrator):
 
 
 class CrankNicolson(TimeIntegrator):
-    def __init__(self,dt,A):
+    def __init__(self, dt, A):
         super().__init__()
 
         self.dt = dt
@@ -99,5 +99,5 @@ class CrankNicolson(TimeIntegrator):
         self.B = I + self.dt / 2 * A
 
     @staticmethod
-    def step(self,u_prev):
+    def step(self, u_prev):
         return self.A.solve(B @ u_prev)

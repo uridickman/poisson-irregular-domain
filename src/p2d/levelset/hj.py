@@ -142,22 +142,66 @@ def _WENO_partial_phi_vectorized(
 
     return w1*u1x + w2*u2x + w3*u3x
 
-@njit(cache=True)
-def _godunov_vectorized(
-    phi_plus    : NDArray,
-    phi_minus   : NDArray,
-    Vn          : NDArray
-) -> NDArray:
-    
-    phi_x2_V_pos = np.maximum(np.maximum(phi_minus,0.0)**2,np.minimum(phi_plus,0.0)**2)
-    phi_x2_V_neg = np.maximum(np.minimum(phi_minus,0.0)**2,np.maximum(phi_plus,0.0)**2)
-    
-    phi_x2 = np.where(Vn > 0.0, phi_x2_V_pos, np.where(Vn < 0.0, phi_x2_V_neg, 0.0))
-    
-    return phi_x2
 
 @njit(cache=True)
-def _godunov_Euler_step(
+def _select_by_magnitude(
+    a: NDArray,
+    b: NDArray
+) -> NDArray:
+    """Return a or b elementwise, whichever has larger |.|, preserving sign."""
+    return np.where(np.abs(a) >= np.abs(b), a, b)
+
+
+@njit(cache=True)
+def _compute_normal_to_interface(phi,dx,dy,n_direction=1):
+    S = sign(phi,min(dx,dy))
+    phi_plus_minus_x = _WENO5_2d_step(phi, dx, 0)
+    phi_plus_minus_y = _WENO5_2d_step(phi, dy, 1)
+    
+    phi_x = _godunov_partial_vectorized_signed(phi_plus_minus_x[0], phi_plus_minus_x[1], S)
+    phi_y = _godunov_partial_vectorized_signed(phi_plus_minus_y[0], phi_plus_minus_y[1], S)
+    
+    grad_phi = np.sqrt(phi_x**2 + phi_y**2) + 1e-12
+    
+    return (
+        n_direction * phi_x / grad_phi,
+        n_direction * phi_y / grad_phi,
+    )
+
+
+@njit(cache=True)
+def _godunov_select(pos_branch: NDArray, neg_branch: NDArray, Vn: NDArray) -> NDArray:
+    return np.where(Vn > 0.0, pos_branch, np.where(Vn < 0.0, neg_branch, 0.0))
+
+
+@njit(cache=True)
+def _godunov_partial_vectorized_squared(phi_plus, phi_minus, Vn):
+    pos = np.maximum(np.maximum(phi_minus, 0.0)**2, np.minimum(phi_plus, 0.0)**2)
+    neg = np.maximum(np.minimum(phi_minus, 0.0)**2, np.maximum(phi_plus, 0.0)**2)
+    return _godunov_select(pos, neg, Vn)
+
+
+@njit(cache=True)
+def _godunov_partial_vectorized_signed(phi_plus, phi_minus, Vn):
+    pos = _select_by_magnitude(np.maximum(phi_minus, 0.0), np.minimum(phi_plus, 0.0))
+    neg = _select_by_magnitude(np.minimum(phi_minus, 0.0), np.maximum(phi_plus, 0.0))
+    return _godunov_select(pos, neg, Vn)
+
+
+@njit(cache=True)
+def _weno_godunov_signed(phi, d, direction, Vn):
+    phi_plus, phi_minus = _WENO5_2d_step(phi, d, direction)
+    return _godunov_partial_vectorized_signed(phi_plus, phi_minus, Vn)
+
+
+@njit(cache=True)
+def _weno_godunov_squared(phi, d, direction, Vn):
+    phi_plus, phi_minus = _WENO5_2d_step(phi, d, direction)
+    return _godunov_partial_vectorized_squared(phi_plus, phi_minus, Vn)
+
+
+@njit(cache=True)
+def _godunov_advection_Euler_step(
     phi_prev        : NDArray,
     Vn              : NDArray,
     f               : NDArray,
@@ -170,12 +214,12 @@ def _godunov_Euler_step(
     phi_plus_minus_x = _WENO5_2d_step(phi_prev, dx, 0)
     phi_plus_minus_y = _WENO5_2d_step(phi_prev, dy, 1)
     
-    phi_x2 = _godunov_vectorized(phi_plus_minus_x[0], phi_plus_minus_x[1], Vn)
-    phi_y2 = _godunov_vectorized(phi_plus_minus_y[0], phi_plus_minus_y[1], Vn)
+    phi_x2 = _godunov_partial_vectorized_squared(phi_plus_minus_x[0], phi_plus_minus_x[1], Vn)
+    phi_y2 = _godunov_partial_vectorized_squared(phi_plus_minus_y[0], phi_plus_minus_y[1], Vn)
     
     grad = np.sqrt(phi_x2 + phi_y2)
 
-    phi_new = phi_prev - n_direction * dt * Vn * (grad)
+    phi_new = phi_prev - n_direction * dt * Vn * grad
 
     if f is not None:
         phi_new += n_direction * dt * f
@@ -203,17 +247,17 @@ class TVD_RK3_Godunov(TimeIntegrator):
         self.args = (self.dt,self.dx,self.dy,self.n_direction)
     
     def step(self,phi_prev,Vn,f):
-        phi_np1 = self.godunov_Euler_step(phi_prev,Vn,f,*self.args)
-        phi_np2 = self.godunov_Euler_step(phi_np1,Vn,f,*self.args)
+        phi_np1 = self.advection_step(phi_prev,Vn,f,*self.args)
+        phi_np2 = self.advection_step(phi_np1,Vn,f,*self.args)
         phi_np1h = 0.75*phi_prev + 0.25*phi_np2
-        phi_np3h = self.godunov_Euler_step(phi_np1h,Vn,f,*self.args)
+        phi_np3h = self.advection_step(phi_np1h,Vn,f,*self.args)
         phi_out = (phi_prev + 2*phi_np3h) / 3
         
         return phi_out
 
 
     @staticmethod
-    def godunov_Euler_step(
+    def advection_step(
         phi_prev        : NDArray,
         Vn              : NDArray,
         f               : NDArray,
@@ -222,6 +266,6 @@ class TVD_RK3_Godunov(TimeIntegrator):
         dy              : float,
         n_direction     : int
     ) -> NDArray:
-        return _godunov_Euler_step(phi_prev,Vn,f,dt,dx,dy,n_direction)
+        return _godunov_advection_Euler_step(phi_prev,Vn,f,dt,dx,dy,n_direction)
 
 

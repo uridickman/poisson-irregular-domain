@@ -55,5 +55,3 @@ def reinitialize_phi(
     print(f"Final error = {err:e}")
 
     return phi[3:-3, 3:-3]
-
-
