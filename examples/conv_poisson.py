@@ -2,8 +2,8 @@ import numpy as np
 import sympy as sp
 import matplotlib.pyplot as plt
 
-from src.p2d.solvers.poisson import PoissonIrregularDomain_2d
-from src.p2d.utils.shapes import flower
+from p2d.solvers.poisson import PoissonIrregularDomain_2d
+from p2d.utils.shapes import flower
 
 
 def test_convergence(res_list=(32, 64, 128, 256), target_res=128):
@@ -38,11 +38,10 @@ def test_convergence(res_list=(32, 64, 128, 256), target_res=128):
             ny=N,
             alpha=u_exact_fn,
             phi=phi,
-            mu=mu,
-            k=k,
             f=f_fn,
             g=u_exact_fn,
-            reinit=False
+            mu=mu,
+            k=k
         )
 
         u_num = solver.solve(solve_where="both")

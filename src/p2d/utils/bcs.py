@@ -1,5 +1,7 @@
 from enum import Enum
 from dataclasses import dataclass
+from typing import Union
+from numpy.typing import NDArray
 
 class BCType(Enum):
     DIRICHLET = 1

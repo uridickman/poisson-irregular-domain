@@ -5,6 +5,60 @@ from typing import Tuple
 from ..solvers.time import TimeManager,TimeIntegrator
 
 
+def reinitialize_phi(
+    phi0        : NDArray,
+    dt          : float,
+    dx          : float,
+    dy          : float,
+    max_iter    : int       = 50,
+    tol         : float     = 1e-3
+) -> NDArray:
+
+    trange = (0.0, max_iter * dt)
+    
+    Nx, Ny = phi0.shape
+
+    # Only compare with previous phi for convergence on
+    # a band of approximately 10 grid points
+    band_width = 5.0 * max(dx, dy)
+    band = np.abs(phi0) < band_width
+
+    # initialize phi to phi0
+    phi = np.zeros((Nx + 6, Ny + 6))
+    constant_extrapolation(phi, phi0)
+
+    # compute the sign of phi
+    S = sign(phi0, eps=min(dx, dy))
+    S_ext = np.zeros_like(phi)
+    constant_extrapolation(S_ext, S)
+    
+    integrator = TVD_RK3_Godunov(dt, dx, dy, n_direction=1)
+    tm = TimeManager(dt,trange=trange)
+    tm.add_integrator("tvd-rk3",integrator)
+
+    while not tm.done():
+
+        phi_old = phi.copy()
+
+        phi_next = tm.step_field("tvd-rk3",phi_old,S_ext,Vn=S_ext)
+        tm.advance_time()
+
+        constant_extrapolation(phi_next, phi_next[3:-3, 3:-3])
+
+        err = np.max(np.abs(phi_next[3:-3, 3:-3][band] - phi_old[3:-3, 3:-3][band]))
+
+        phi = phi_next
+
+        if err < tol:
+            print(f"Reinitialization converged in {tm.step_idx} iterations.")
+            return phi[3:-3, 3:-3]
+
+    print(f"Reinitialization failed to converge in {tm.num_steps} iterations.")
+    print(f"Final error = {err:e}")
+
+    return phi[3:-3, 3:-3]
+
+
 @njit(cache=True)
 def constant_extrapolation(
     phi_extrap  : NDArray,
@@ -246,7 +300,7 @@ class TVD_RK3_Godunov(TimeIntegrator):
 
         self.args = (self.dt,self.dx,self.dy,self.n_direction)
     
-    def step(self,phi_prev,Vn,f):
+    def step(self,phi_prev,f,Vn):
         phi_np1 = self.advection_step(phi_prev,Vn,f,*self.args)
         phi_np2 = self.advection_step(phi_np1,Vn,f,*self.args)
         phi_np1h = 0.75*phi_prev + 0.25*phi_np2

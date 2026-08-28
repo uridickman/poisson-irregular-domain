@@ -12,6 +12,7 @@ __pycache__/
 loss.py
 example2.py
 .python-version
+figs/
 
 generate_dataset.py
 

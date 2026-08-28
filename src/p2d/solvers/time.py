@@ -1,4 +1,5 @@
-from abc import ABC,abstractmethod
+from abc import ABC, abstractmethod
+from typing import Tuple, Union, Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -6,37 +7,37 @@ from numpy.typing import NDArray
 from scipy.sparse import lil_matrix, eye
 from scipy.sparse.linalg import splu
 
-class TimeManager(object):
+
+class TimeManager:
     def __init__(
         self,
-        trange: Tuple[float, float] = (0.0, 1.0),
-        integrator : str = "RK3"
+        dt: float,
+        trange: Tuple[float, float] = (0.0, 1.0)
     ):
-        super().__init__()
-
         self.tmin, self.tmax = trange
-        
-        self.integrator = integrator
-        self.dt = self.integrator.dt
-        self.T = np.arange(*trange,step=self.dt)
+        self.dt = dt
         self.t = self.tmin
-        self.step = 0
+        self.step_idx = 0
+        self.num_steps = int(np.round((self.tmax - self.tmin) / self.dt))
         
-        self.num_steps = int((self.tmax - self.tmin) / self.dt)
-        
-        
-    def reset(self):
-        self.t = 0
+        self.integrators =  {}
 
-    def advance(self, u_prev, **kwargs):
-        u_next = self.integrator.step(u_prev, **kwargs)
+    def add_integrator(self, name: str, integrator: TimeIntegrator):
+        self.integrators[name] = integrator
+
+    def step_field(self, name: str, u_prev, f, **kwargs):
+        return self.integrators[name].step(u_prev, f, **kwargs)
+
+    def advance_time(self):
         self.t += self.dt
-        self.step += 1
-        
-        return u_next
+        self.step_idx += 1
 
     def done(self):
-        return self.t >= self.tmax
+        return self.t >= self.tmax - 1e-12 * self.dt
+        
+    def reset(self):
+        self.t = self.tmin
+        self.step = 0
 
 
 class TimeIntegrator(ABC):
@@ -44,46 +45,45 @@ class TimeIntegrator(ABC):
         super().__init__()
         
     @abstractmethod
-    def step(self,u_prev,**kwargs):
+    def step(self, u_prev, f, **kwargs):
         pass
 
 
 class ForwardEuler(TimeIntegrator):
     def __init__(self, dt, A):
         super().__init__()
-        self.A = A
+        self.A = A.tocsc()
         self.dt = dt
     
-    def step(self,u_prev):
-        return u_prev + self.dt * (self.A @ u_prev)
+    def step(self, u_prev, f, **kwargs):
+        return u_prev + self.dt * (self.A @ u_prev + f)
 
 
 class RK3(TimeIntegrator):
     def __init__(self, dt, A):
         super().__init__()
-        self.A = A
+        self.M = A.tocsc()
         self.dt = dt
 
-    def step(self, u_prev):
-        u1 = u_prev + self.dt * (self.A @ u_prev)
-        u2 = 0.75 * u_prev + 0.25 * (u1 + self.dt * (self.A @ u1))
-        u3 = u2 + self.dt * (self.A @ u2)
-        return (u_prev + 2 * u3) / 3
+    def step(self, u_prev, f, **kwargs):
+        u1 = u_prev + self.dt * (self.M @ u_prev + f)
+        u2 = 0.75 * u_prev + 0.25 * (u1 + self.dt * (self.M @ u1 + f))
+        u3 = u2 + self.dt * (self.M @ u2 + f)
+        return (u_prev + 2 * u3) / 3.0
 
 
 class BackwardEuler(TimeIntegrator):
     def __init__(self, dt, A):
-        super().__init__(dt=dt)
-
+        super().__init__()
         self.dt = dt
         
-        n,m = A.shape[0],A.shape[1]
-        I = eye(n,m)
+        n, m = A.shape[0], A.shape[1]
+        I = eye(n, m, format="csc")
         
-        self.A = splu(I - self.dt * A)
+        self.M = splu((I - self.dt * A).tocsc())
         
-    def step(u_prev):
-        return self.A.solve(u_prev)
+    def step(self, u_prev, f, **kwargs):
+        return self.M.solve(u_prev + self.dt * f)
 
 
 class CrankNicolson(TimeIntegrator):
@@ -92,12 +92,11 @@ class CrankNicolson(TimeIntegrator):
 
         self.dt = dt
 
-        n,m = A.shape[0],A.shape[1]
-        I = eye(n,m)
-        
-        self.A = splu(I - self.dt / 2 * A)
-        self.B = I + self.dt / 2 * A
+        n, m = A.shape[0], A.shape[1]
+        I = eye(n, m, format="csc")
 
-    @staticmethod
-    def step(self, u_prev):
-        return self.A.solve(B @ u_prev)
+        self.M = splu((I - self.dt / 2.0 * A).tocsc())
+        self.N = (I + self.dt / 2.0 * A).tocsc()
+
+    def step(self, u_prev, f, **kwargs):
+        return self.M.solve(self.N @ u_prev + self.dt * f)

@@ -1,18 +1,18 @@
 import numpy as np
 from scipy.sparse import lil_matrix
-from scipy.sparse.linalg import splu
+from scipy.sparse.linalg import spsolve
 
 from typing import List, Tuple, Union, Callable
 from numpy.typing import NDArray
 
 # Custom
 from ..utils.shapes import *
-from ..levelset import advection as lsa
-from ..levelset import hj as hj
+from ..levelset import levelset as ls
 from ..utils.bcs import BCType,WallBC,WallType
+from .basesolver import BaseSolver
 
 
-class PoissonIrregularDomain_2d(object):
+class PoissonIrregularDomain_2d(BaseSolver):
     """Class to construct a linear system to solve the Poisson equation on an irregular domain with
     Dirichlet Boundary conditions on the wall and boundary from Gibou et al. (2002).
     Can solve inside or outside, as jump conditions are not supported.
@@ -20,8 +20,6 @@ class PoissonIrregularDomain_2d(object):
         ku-∇.(μ∇u) = f,        x ϵ Ω
         u = α,                 x ϵ Γ
         u = g,                 x ϵ ∂Ω
-    
-    TODO: Enable solving both inside and outside since BCs are Dirichlet
 
     Args:
         xrange (tuple[int,int], optional): domain in x. Defaults to (0,1).
@@ -30,124 +28,31 @@ class PoissonIrregularDomain_2d(object):
         ny (int, optional): number of grid points in y. Defaults to 32.
         alpha (callable | float, optional): value of u on the Dirichlet boundary. Defaults to 0.0.
         phi (callable | NDArray, optional): level-set function. Defaults to np.zeros((32, 32)).
-        mu (callable | NDArray, optional): diffusion coefficient. Defaults to np.zeros((32, 32)).
-        k (callable | NDArray, optional): reaction term. Defaults to np.zeros((32, 32)).
         f (callable | NDArray, optional): forcing term. Defaults to np.zeros((32, 32)).
         g (callable | NDArray, optional): boundary condition on the wall. Defaults to np.zeros((32, 32)).
+        mu (callable | NDArray, optional): diffusion coefficient. Defaults to np.zeros((32, 32)).
+        k (callable | NDArray, optional): reaction term. Defaults to np.zeros((32, 32)).
     
     """
     def __init__(
         self,
-        xrange   : tuple[int,int] = (0,1),
-        yrange   : tuple[int,int] = (0,1),
+        xrange   : tuple[float, float] | tuple[int, int] = (0, 1),
+        yrange   : tuple[float, float] | tuple[int, int] = (0, 1),
         nx       : int   = 32,
         ny       : int   = 32,
         alpha    : callable | float = 0.0,
-        phi      : callable | NDArray = np.zeros((32, 32)),
-        mu       : callable | NDArray = np.zeros((32, 32)),
-        k        : callable | NDArray = np.zeros((32, 32)),
-        f        : callable | NDArray = np.zeros((32, 32)),
-        g        : callable | NDArray = np.zeros((32, 32)),
-        reinit   : bool = True
+        phi      : callable | NDArray | float = 0.0,
+        f        : callable | NDArray | float = 0.0,
+        g        : callable | NDArray | float = 0.0,
+        mu       : callable | NDArray | float = 1.0,
+        k        : callable | NDArray | float = 1.0
+        
     ):
-        super().__init__()
+        super().__init__(xrange,yrange,nx,ny,alpha,phi,f,g,mu,k)
 
-        self.xrange, self.yrange = xrange,yrange
-        self.nx, self.ny = nx, ny
-
-        self.dx = (xrange[1] - xrange[0]) / (nx - 1)
-        self.dy = (yrange[1] - yrange[0]) / (ny - 1)
-
-        self.X, self.Y = np.meshgrid(
-            np.linspace(*xrange,num=nx),
-            np.linspace(*yrange,num=ny),
-            indexing="ij"
-        )
-        
-        if callable(alpha):
-            self.alpha_fn = alpha
-        else:
-            self.alpha_fn = lambda x, y, _alpha=alpha: np.full_like(np.asarray(x, dtype=float), _alpha)
-
-        self.phi = self._evaluate_field(phi,self.X,self.Y)
-        if reinit:
-            self.phi[:,:] = self._reinitialize_phi(self.phi,self.dx,self.dy,max_iter=500,tol=1e-4)
-
-        self.mu = self._evaluate_field(mu,self.X,self.Y)
-        self.k = self._evaluate_field(k,self.X,self.Y)
-        self.f = self._evaluate_field(f,self.X,self.Y)
-        self.g = self._evaluate_field(g,self.X,self.Y)
-        
-        self.wall_boundary_conditions = {
-            WallType.LEFT   : WallBC(
-                                bc_type   = BCType.DIRICHLET,
-                                val       = self.g[0,:]
-                                ),
-            WallType.RIGHT  : WallBC(
-                                bc_type   = BCType.DIRICHLET,
-                                val       = self.g[-1,:] 
-                                ),
-            WallType.TOP    : WallBC(
-                                bc_type   = BCType.DIRICHLET,
-                                val       = self.g[:,-1] 
-                                ),
-            WallType.BOTTOM : WallBC(
-                                bc_type   = BCType.DIRICHLET,
-                                val       = self.g[:,0]
-                                )
-        }
-        
 
     def __repr__(self):
         return "PoissonIrregularDomain_2d"
-
-
-    @staticmethod
-    def _evaluate_field(field, x, y):
-        if callable(field):
-            return field(x, y)
-        if isinstance(field, (int, float)):
-            return np.full_like(x, field, dtype=float)
-        return field
-
-
-    @staticmethod
-    def _reinitialize_phi(phi,dx,dy,max_iter=500,tol=1e-4):
-        print("Reinitializing level-set function...")
-        dt = 0.3 * np.minimum(dx,dy)
-        return lsa.reinitialize_phi(
-            phi,dt,dx,dy,max_iter=max_iter,tol=tol
-        )
-
-
-    @staticmethod
-    def _get_ghosts(phi, i, j):
-        s = phi[i,j]
-
-        try:
-            ghosts = {
-                "top":    s * phi[i, j+1] < 0,
-                "bottom": s * phi[i, j-1] < 0,
-                "left":   s * phi[i-1, j] < 0,
-                "right":  s * phi[i+1, j] < 0,
-            }
-        except IndexError:
-            ghosts = {
-                "top":    False,
-                "bottom": False,
-                "left":   False,
-                "right":  False,
-            }
-
-        return ghosts
-
-
-    @staticmethod
-    def _is_physical(phi,i,j,inside=True):
-        if inside:
-            return phi[i,j] < 0
-        else:
-            return phi[i,j] > 0
 
 
     def compute_lhs_rhs(self,solve_inside=False):
@@ -330,15 +235,13 @@ class PoissonIrregularDomain_2d(object):
             NDArray: the returned solution
         """
         # Construct the linear system
-        lhs,rhs,nodes = self.compute_lhs_rhs(solve_inside=solve_inside)
-        lu = splu(lhs)
-        u = lu.solve(rhs)
+        A,rhs,nodes = self.compute_lhs_rhs(solve_inside=solve_inside)
+        u = spsolve(A, rhs)
 
         # Populate the full regular grid based on the nodes
         # used to solve the system.
         # The other nodes are set to the value on the interface.nx
         sol = np.full((self.nx, self.ny), np.nan)
-        for row, (i, j) in enumerate(nodes):
-            sol[i, j] = u[row]
+        self.vec_to_matrix(nodes,sol,u)
         
         return sol

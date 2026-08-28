@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-from src.p2d.solvers.poisson import PoissonIrregularDomain_2d
-from src.p2d.utils.shapes import *
+from p2d.solvers.poisson import PoissonIrregularDomain_2d
+from p2d.utils.shapes import *
 
 mu = lambda x, y: np.ones_like(x)
 k =  lambda x, y: np.zeros_like(x)
@@ -37,8 +37,8 @@ solver = PoissonIrregularDomain_2d(
 x,y = solver.X, solver.Y
 phi = solver.phi
 
-u_outside = solver.solve(solve_inside=False)
-u_inside = solver.solve(solve_inside=True)
+u_outside = solver.solve(solve_where="outside")
+u_inside = solver.solve(solve_where="inside")
 
 ## PLOT SOLUTION
 
