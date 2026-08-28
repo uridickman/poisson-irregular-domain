@@ -78,175 +78,7 @@ class HeatIrregularDomain_2d(BaseSolver):
                 u[row] = self.wall_boundary_conditions[WallType.BOTTOM].val[i]
 
         return u
-
-
-    def compute_lhs_rhs(self, solve_inside=False):
-        """Constructs the spatial discretization matrix A and boundary/forcing vector rhs
-        for the system du/dt = A*u + rhs.
-        """
-        phi = self.phi
-        mu = self.mu
-        f = self.f
-
-        interior_nodes = [
-            (i, j)
-            for i in range(1, self.nx - 1)
-            for j in range(1, self.ny - 1)
-            if self._is_physical(self.phi, i, j, inside=solve_inside)
-        ]
         
-        left_nodes = [
-            (0, j)
-            for j in range(self.ny)
-            if self._is_physical(self.phi, 0, j, inside=solve_inside)
-        ]
-
-        right_nodes = [
-            (self.nx - 1, j)
-            for j in range(self.ny)
-            if self._is_physical(self.phi, self.nx - 1, j, inside=solve_inside)
-        ]
-
-        bottom_nodes = [
-            (i, 0)
-            for i in range(1, self.nx - 1)
-            if self._is_physical(self.phi, i, 0, inside=solve_inside)
-        ]
-
-        top_nodes = [
-            (i, self.ny - 1)
-            for i in range(1, self.nx - 1)
-            if self._is_physical(self.phi, i, self.ny - 1, inside=solve_inside)
-        ]
-        
-        all_nodes = interior_nodes + right_nodes + left_nodes + top_nodes + bottom_nodes
-        
-        node_ids = -np.ones((self.nx, self.ny), dtype=int)
-        for row, (i, j) in enumerate(all_nodes):
-            node_ids[i, j] = row
-
-        N = len(all_nodes)
-
-        A = lil_matrix((N, N), dtype=float)
-        rhs = np.zeros(N)
-
-        X = self.X
-        Y = self.Y
-        dx = self.dx
-        dy = self.dy
-        dx2 = dx**2
-        dy2 = dy**2
-
-        # For wall nodes: held fixed at Dirichlet values
-        for i, j in (right_nodes + left_nodes + top_nodes + bottom_nodes):
-            row = node_ids[i, j]
-            A[row, row] = 0.0
-            rhs[row] = 0.0
-        
-        min_theta_x = np.inf
-        min_theta_y = np.inf
-
-        for i, j in interior_nodes:
-            phi_ij = phi[i, j]
-                
-            row = node_ids[i, j]
-            rhs[row] = f[i, j]
-            
-            ghosts = self._get_ghosts(phi, i, j)
-            
-            right_ghost = ghosts["right"]
-            left_ghost = ghosts["left"]
-            top_ghost = ghosts["top"]
-            bottom_ghost = ghosts["bottom"]
-            
-            right_wall = (i + 1 == self.nx - 1)
-            left_wall = (i - 1 == 0)
-            top_wall = (j + 1 == self.ny - 1)
-            bottom_wall = (j - 1 == 0)
-            
-            mu_iph = (mu[i, j] + mu[i + 1, j]) / 2.0
-            mu_imh = (mu[i, j] + mu[i - 1, j]) / 2.0
-            mu_jph = (mu[i, j] + mu[i, j + 1]) / 2.0
-            mu_jmh = (mu[i, j] + mu[i, j - 1]) / 2.0
-
-            # --- Right neighbor ---
-            if right_ghost:
-                theta = np.abs(phi_ij) / (np.abs(phi_ij) + np.abs(phi[i + 1, j]))
-                u_interface = self.alpha_fn(X[i, j] + theta * dx, Y[i, j])
-                A[row, row] -= mu_iph / theta / dx2
-                rhs[row] += mu_iph * u_interface / theta / dx2
-
-                if theta < min_theta_x:
-                    min_theta_x = theta
-
-            elif right_wall:
-                g_val = self.wall_boundary_conditions[WallType.RIGHT].val[j]
-                A[row, row] -= mu_iph / dx2
-                rhs[row] += mu_iph * g_val / dx2
-            else:
-                right_row = node_ids[i + 1, j]
-                A[row, row] -= mu_iph / dx2
-                A[row, right_row] += mu_iph / dx2
-
-            # --- Left neighbor ---
-            if left_ghost:
-                theta = np.abs(phi_ij) / (np.abs(phi_ij) + np.abs(phi[i - 1, j]))
-                u_interface = self.alpha_fn(X[i, j] - theta * dx, Y[i, j])
-                A[row, row] -= mu_imh / theta / dx2
-                rhs[row] += mu_imh * u_interface / theta / dx2
-
-                if theta < min_theta_x:
-                    min_theta_x = theta
-
-            elif left_wall:
-                g_val = self.wall_boundary_conditions[WallType.LEFT].val[j]
-                A[row, row] -= mu_imh / dx2
-                rhs[row] += mu_imh * g_val / dx2
-            else:
-                left_row = node_ids[i - 1, j]
-                A[row, row] -= mu_imh / dx2
-                A[row, left_row] += mu_imh / dx2
-
-            # --- Top neighbor ---
-            if top_ghost:
-                theta = np.abs(phi_ij) / (np.abs(phi_ij) + np.abs(phi[i, j + 1]))
-                u_interface = self.alpha_fn(X[i, j], Y[i, j] + theta * dy)
-                A[row, row] -= mu_jph / theta / dy2
-                rhs[row] += mu_jph * u_interface / theta / dy2
-
-                if theta < min_theta_y:
-                    min_theta_y = theta
-
-            elif top_wall:
-                g_val = self.wall_boundary_conditions[WallType.TOP].val[i]
-                A[row, row] -= mu_jph / dy2
-                rhs[row] += mu_jph * g_val / dy2
-            else:
-                top_row = node_ids[i, j + 1]
-                A[row, row] -= mu_jph / dy2
-                A[row, top_row] += mu_jph / dy2
-
-            # --- Bottom neighbor ---
-            if bottom_ghost:
-                theta = np.abs(phi_ij) / (np.abs(phi_ij) + np.abs(phi[i, j - 1]))
-                u_interface = self.alpha_fn(X[i, j], Y[i, j] - theta * dy)
-                A[row, row] -= mu_jmh / theta / dy2
-                rhs[row] += mu_jmh * u_interface / theta / dy2
-
-                if theta < min_theta_y:
-                    min_theta_y = theta
-
-            elif bottom_wall:
-                g_val = self.wall_boundary_conditions[WallType.BOTTOM].val[i]
-                A[row, row] -= mu_jmh / dy2
-                rhs[row] += mu_jmh * g_val / dy2
-            else:
-                bottom_row = node_ids[i, j - 1]
-                A[row, row] -= mu_jmh / dy2
-                A[row, bottom_row] += mu_jmh / dy2
-        
-        return A.tocsc(), rhs, all_nodes, min_theta_x, min_theta_y
-
 
     def initialize_solver(
         self,
@@ -266,8 +98,8 @@ class HeatIrregularDomain_2d(BaseSolver):
 
         if self.solve_inside:
 
-            self.A_in, self.rhs_in, self.nodes_in, min_tx_in, min_ty_in = self.compute_lhs_rhs(solve_inside=True)
-            self.tm.add_integrator("inside",CrankNicolson(dt, self.A_in))
+            self.A_in, self.rhs_in, self.nodes_in = self.compute_lhs_rhs(solve_inside=True)
+            self.tm.add_integrator("inside",CrankNicolson(dt, self.A_in.tocsc()))
 
             self.u_in = np.zeros(len(self.nodes_in), dtype=float)
             self.matrix_to_vec(self.nodes_in,u0_field,self.u_in)
@@ -277,8 +109,8 @@ class HeatIrregularDomain_2d(BaseSolver):
 
         if self.solve_outside:
             
-            self.A_out, self.rhs_out, self.nodes_out, min_tx_out, min_ty_out = self.compute_lhs_rhs(solve_inside=False)
-            self.tm.add_integrator("outside",CrankNicolson(dt, self.A_out))
+            self.A_out, self.rhs_out, self.nodes_out = self.compute_lhs_rhs(solve_inside=False)
+            self.tm.add_integrator("outside",CrankNicolson(dt, self.A_out.tocsc()))
             
             self.u_out = np.zeros(len(self.nodes_out), dtype=float)
             self.matrix_to_vec(self.nodes_out,u0_field,self.u_out)
