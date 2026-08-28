@@ -3,7 +3,7 @@ import sympy as sp
 import matplotlib.pyplot as plt
 
 from p2d.solvers.poisson import PoissonIrregularDomain_2d
-from p2d.utils.shapes import flower
+from p2d.utils.shapes import *
 
 
 def test_convergence(res_list=(32, 64, 128, 256), target_res=128):
@@ -17,7 +17,7 @@ def test_convergence(res_list=(32, 64, 128, 256), target_res=128):
 
     mu = lambda x, y: np.ones_like(x)
     k = lambda x, y: np.zeros_like(x)
-    phi = lambda x, y: flower(x, y, r0=0.5)
+    phi = lambda x, y: circle(x, y, x0=0.0,y0=0.0,r=0.5)
 
     l2_errors = []
     linf_errors = []
@@ -25,6 +25,8 @@ def test_convergence(res_list=(32, 64, 128, 256), target_res=128):
     u_ex_target = None
     u_num_target = None
     solver_target = None
+
+    save_fig = "figs/convergence_poisson.png"
 
     print(f"{'=' * 65}")
     print(f"{'N':>6} | {'L_inf Error':>12} | {'L_inf Rate':>10} | {'L_2 Error':>12} | {'L_2 Rate':>10}")
@@ -82,7 +84,7 @@ def test_convergence(res_list=(32, 64, 128, 256), target_res=128):
     # Top Left: Exact Solution
     pc0 = axs[0, 0].pcolormesh(x_t, y_t, u_ex_target, cmap="viridis", shading="auto", vmin=vmin, vmax=vmax)
     axs[0, 0].contour(x_t, y_t, phi_t, levels=[0], colors="k", linewidths=1.5)
-    axs[0, 0].set_title(rf"Exact Solution ($N_x=N_y={target_res}$)", fontsize=13)
+    axs[0, 0].set_title(rf"Exact ($N_x=N_y={target_res}$)", fontsize=13)
     axs[0, 0].set_xlabel(r"$x$", fontsize=12)
     axs[0, 0].set_ylabel(r"$y$", fontsize=12)
     axs[0, 0].set_aspect("equal")
@@ -92,7 +94,7 @@ def test_convergence(res_list=(32, 64, 128, 256), target_res=128):
     # Top Right: Numerical Solution
     pc1 = axs[0, 1].pcolormesh(x_t, y_t, u_num_target, cmap="viridis", shading="auto", vmin=vmin, vmax=vmax)
     axs[0, 1].contour(x_t, y_t, phi_t, levels=[0], colors="k", linewidths=1.5)
-    axs[0, 1].set_title(rf"Numerical Solution ($N_x=N_y={target_res}$)", fontsize=13)
+    axs[0, 1].set_title(rf"Numerical ($N_x=N_y={target_res}$)", fontsize=13)
     axs[0, 1].set_xlabel(r"$x$", fontsize=12)
     axs[0, 1].set_ylabel(r"$y$", fontsize=12)
     axs[0, 1].set_aspect("equal")
@@ -103,7 +105,7 @@ def test_convergence(res_list=(32, 64, 128, 256), target_res=128):
     err_target = np.abs(u_ex_target - u_num_target)
     pc2 = axs[1, 0].pcolormesh(x_t, y_t, err_target, cmap="inferno", shading="auto")
     axs[1, 0].contour(x_t, y_t, phi_t, levels=[0], colors="cyan", linewidths=1.5)
-    axs[1, 0].set_title(rf"Absolute Error $|u - u_h|$ ($N_x=N_y={target_res}$)", fontsize=13)
+    axs[1, 0].set_title(rf"$|u - u_h|$ ($N_x=N_y={target_res}$)", fontsize=13)
     axs[1, 0].set_xlabel(r"$x$", fontsize=12)
     axs[1, 0].set_ylabel(r"$y$", fontsize=12)
     axs[1, 0].set_aspect("equal")
@@ -115,14 +117,14 @@ def test_convergence(res_list=(32, 64, 128, 256), target_res=128):
     axs[1, 1].loglog(N_arr, l2_errors, "o-", label=r"$L^2$", base=2, lw=2)
     axs[1, 1].loglog(N_arr, linf_errors, "s-", label=r"$L^\infty$", base=2, lw=2)
     axs[1, 1].loglog(N_arr, l2_errors[0] * (N_arr[0] / N_arr)**2, "--k", label=r"$\mathcal{O}(h^2)$", base=2)
-    axs[1, 1].set_xlabel(r"Grid resolution $N$", fontsize=12)
+    axs[1, 1].set_xlabel(r"$N_x$", fontsize=12)
     axs[1, 1].set_ylabel(r"Error", fontsize=12)
-    axs[1, 1].set_title("Poisson Solver Convergence", fontsize=13)
+    axs[1, 1].set_title("Convergence", fontsize=13)
     axs[1, 1].grid(True, which="both", alpha=0.3)
     axs[1, 1].legend(fontsize=11, frameon=False)
 
-    fig.savefig("convergence_plot.png", dpi=300)
-    print("Saved convergence plot to convergence_plot.png")
+    fig.savefig(save_fig, dpi=300)
+    print(f"Saved convergence plot to {save_fig}")
 
 
 if __name__ == "__main__":

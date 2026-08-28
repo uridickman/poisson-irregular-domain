@@ -129,11 +129,11 @@ class HeatIrregularDomain_2d(BaseSolver):
             step_idx = self.tm.step_idx
 
             if self.solve_inside:
-                self.u_in = self.tm.step_field("inside",self.u_in, self.rhs_in)
+                self.u_in = self.tm.step_field("inside",self.u_in, -self.rhs_in)
                 self.u_in = self.apply_boundary_conditions(self.u_in, nodes=self.nodes_in)
                 self.vec_to_matrix(self.nodes_in,self.sol[step_idx,:,:],self.u_in)
             if self.solve_outside:
-                self.u_out = self.tm.step_field("outside",self.u_out, self.rhs_out)
+                self.u_out = self.tm.step_field("outside",self.u_out, -self.rhs_out)
                 self.u_out = self.apply_boundary_conditions(self.u_out, nodes=self.nodes_out)
                 self.vec_to_matrix(self.nodes_out,self.sol[step_idx,:,:],self.u_out)
 

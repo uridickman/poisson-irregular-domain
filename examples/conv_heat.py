@@ -12,7 +12,7 @@ def test_convergence(
     nx=128,
     ny=128,
     trange=(0.0, 0.04),
-    save_fig="conv_heat.png",
+    save_fig="figs/convergence_heat.png",
 ):
     """
     Test 2nd-order temporal convergence of the Crank-Nicolson heat equation solver
@@ -112,7 +112,7 @@ def test_convergence(
     # Top Left: Reference Solution
     pc0 = axs[0, 0].pcolormesh(x_t, y_t, u_ref_plot, cmap="viridis", shading="auto", vmin=vmin, vmax=vmax)
     axs[0, 0].contour(x_t, y_t, phi_t, levels=[0], colors="k", linewidths=1.5)
-    axs[0, 0].set_title(rf"Reference Solution ($t={tmax:.2f}, \Delta t={dt_ref}$)", fontsize=13)
+    axs[0, 0].set_title(rf"Exact ($t={tmax:.2f}, \Delta t={dt_ref}$)", fontsize=13)
     axs[0, 0].set_xlabel(r"$x$", fontsize=12)
     axs[0, 0].set_ylabel(r"$y$", fontsize=12)
     axs[0, 0].set_aspect("equal")
@@ -122,7 +122,7 @@ def test_convergence(
     # Top Right: Numerical Solution
     pc1 = axs[0, 1].pcolormesh(x_t, y_t, u_target_plot, cmap="viridis", shading="auto", vmin=vmin, vmax=vmax)
     axs[0, 1].contour(x_t, y_t, phi_t, levels=[0], colors="k", linewidths=1.5)
-    axs[0, 1].set_title(rf"Numerical Solution ($\Delta t={target_dt}$)", fontsize=13)
+    axs[0, 1].set_title(rf"Numerical ($\Delta t={target_dt}$)", fontsize=13)
     axs[0, 1].set_xlabel(r"$x$", fontsize=12)
     axs[0, 1].set_ylabel(r"$y$", fontsize=12)
     axs[0, 1].set_aspect("equal")
@@ -132,7 +132,7 @@ def test_convergence(
     # Bottom Left: Absolute Error
     pc2 = axs[1, 0].pcolormesh(x_t, y_t, err_target, cmap="inferno", shading="auto")
     axs[1, 0].contour(x_t, y_t, phi_t, levels=[0], colors="cyan", linewidths=1.5)
-    axs[1, 0].set_title(rf"Absolute Error $|u - u_h|$ ($\Delta t={target_dt}$)", fontsize=13)
+    axs[1, 0].set_title(rf"$|u - u_h|$ ($\Delta t={target_dt}$)", fontsize=13)
     axs[1, 0].set_xlabel(r"$x$", fontsize=12)
     axs[1, 0].set_ylabel(r"$y$", fontsize=12)
     axs[1, 0].set_aspect("equal")
@@ -146,7 +146,7 @@ def test_convergence(
     axs[1, 1].loglog(dt_arr, l2_errors[0] * (dt_arr / dt_arr[0])**2, "--k", label=r"$\mathcal{O}(\Delta t^2)$", base=2)
     axs[1, 1].set_xlabel(r"Time step $\Delta t$", fontsize=12)
     axs[1, 1].set_ylabel(r"Error", fontsize=12)
-    axs[1, 1].set_title("Heat Solver Time Convergence", fontsize=13)
+    axs[1, 1].set_title("Convergence", fontsize=13)
     axs[1, 1].grid(True, which="both", alpha=0.3)
     axs[1, 1].legend(fontsize=11, frameon=False)
 

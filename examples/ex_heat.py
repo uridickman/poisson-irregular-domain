@@ -67,5 +67,5 @@ cbar = fig.colorbar(pc, ax=axs, pad=0.02, shrink=0.85)
 cbar.set_label(r"$u(x, y, t)$", fontsize=14)
 cbar.ax.tick_params(labelsize=12)
 
-fig.savefig("heat_fig.png", dpi=300, bbox_inches="tight")
+fig.savefig("figs/example_heat.png", dpi=300, bbox_inches="tight")
 print("Heat simulation completed and saved to heat_fig.png")
