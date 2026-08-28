@@ -6,9 +6,21 @@ Solves the Poisson equation on an irregular domain on a Cartesian grid based on 
 
 ### Problem statement
 
+This project solves two problems. The first is the Poisson equation:
+
 ```math
 \begin{align*}
 ku-\nabla\cdot(\mu\nabla u)&=f,\quad x,y \in \Omega \\
+u &= \alpha,\quad x,y \in \Gamma \\
+u &= g,\quad x,y \in \partial \Omega
+\end{align*}
+```
+
+The second is the Heat Equation:
+
+```math
+\begin{align*}
+\frac{\partial u}{\partial t}&=\nabla\cdot(\mu\nabla u) + f,\quad x,y \in \Omega \\
 u &= \alpha,\quad x,y \in \Gamma \\
 u &= g,\quad x,y \in \partial \Omega
 \end{align*}
@@ -42,14 +54,13 @@ Overall, the scheme is second-order in space.
 
 ### Usage
 
-Create a virtual environment:
+Sync uv with the current project and create a virtual environment:
 ```bash
-uv venv /path/to/venv --python 3.14
-source /path/to/venv/bin/activate
-uv pip install -e .
+uv sync
 ```
 
-Run the example:
+Run the Poisson and heat examples:
 ```bash
-python example.py
+uv run examples/poisson.py
+uv run examples/heat.py
 ```
